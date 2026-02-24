@@ -1,5 +1,9 @@
 from KisAuth import KisAuth
-from KisKey import app_key, app_secret, app_domain
+from KisKey import app_account
+from KisKey import app_domain
+from KisKey import app_is_virtual
+from KisKey import app_key
+from KisKey import app_secret
 from InfoKosdaq import find_by_name, load_kosdaq_master
 
 kosdq_records = load_kosdaq_master()
@@ -17,11 +21,16 @@ for name in kosdq_wish_names:
     else:
         kosdq_wish_list.append(results[0])
 
-auth = KisAuth(app_key, app_secret, app_domain)
+auth = KisAuth(app_key, app_secret, app_account, app_is_virtual, app_domain)
 
 # QLD ETF의 현재가 조회 (미국 주식 예시)
 #price = auth.price.get_current_overseas("QLD", "AMS")
 #print(f"QLD 현재가: {price}")
+
+auth.account.update()
+print(f"예수금: {auth.account.dnca_tot_amt}")
+print(f"D+1 예수금: {auth.account.nxdy_excc_amt}")
+print(f"D+2 예수금: {auth.account.prvs_rcdl_excc_amt}")
 
 # 관심 종목들의 현재가 조회
 for stock in kosdq_wish_list:

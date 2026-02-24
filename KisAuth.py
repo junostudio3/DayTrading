@@ -5,9 +5,10 @@ import json
 
 
 class KisAuth:
-    def __init__(self, api_key, secret_key, domain):
+    def __init__(self, api_key, secret_key, account, is_virtual, domain):
         self.api_key = api_key
         self.secret_key = secret_key
+        self.is_virtual = is_virtual
         self.domain = domain
 
         # cache 폴더는 현재 디렉토리에 생성됩니다. 필요에 따라 경로를 변경할 수 있습니다.
@@ -20,7 +21,10 @@ class KisAuth:
         from KisAuthPrice import KisAuthPrice
         self.price = KisAuthPrice(self)
 
-    def get_access_token(self):
+        from KisAuthAccount import KisAuthAccount
+        self.account = KisAuthAccount(self, account)
+
+    def _get_access_token(self):
         # 캐시된 토큰이 유효한지 확인
         if os.path.exists(self.token_cache_file):
             with open(self.token_cache_file, "r") as f:
@@ -55,3 +59,13 @@ class KisAuth:
             return access_token
         else:
             raise Exception(f"Failed to get access token: {response.status_code} {response.text}")
+
+    def request(self, url, headers, params=None):
+        #headers에 authorization, appkey, appsecret를 포함시킨다
+        headers.update({
+            "authorization": f"Bearer {self._get_access_token()}",
+            "appkey": self.api_key,
+            "appsecret": self.secret_key
+        })
+
+        return requests.get(f"{self.domain}/uapi/domestic-stock/v1/trading/inquire-balance", headers=headers, params=params)
