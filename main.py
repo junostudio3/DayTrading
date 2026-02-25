@@ -4,7 +4,8 @@ from KisKey import app_domain
 from KisKey import app_is_virtual
 from KisKey import app_key
 from KisKey import app_secret
-from InfoKosdaq import find_by_name, load_kosdaq_master
+from InfoKosdaq import find_kosdaq_by_name, load_kosdaq_master
+from InfoKospi import find_kospi_by_name, load_kospi_master
 from PriceAnalysis import PriceAnalysis
 import time
 from typing import Any, Optional
@@ -14,19 +15,33 @@ class DayTradingBot:
         kosdq_records = load_kosdaq_master()
 
         # 관심 종목을 리스트로 수집
-        kosdq_wish_names = ["인텍플러스"]
-        self.kosdq_monitor_list = []
-        self.kosdq_buy_list = []
+        kospi_wish_names = []
+        kospi_wish_names += ["대한항공"]
+
+        kosdq_wish_names = []
+        kosdq_wish_names += ["인텍플러스", "고영", "펨트론"]
+
+        self.monitor_list = []
+        self.buy_list = []
 
         # 관심 종목 정보 수집
-        for name in kosdq_wish_names:
-            results = find_by_name(name, kosdq_records)
+        for name in kospi_wish_names:
+            results = find_kospi_by_name(name, load_kospi_master())
             if results is None or len(results) == 0:
                 print(f"{name} 종목을 찾을 수 없습니다.")
                 exit(1)
             else:
-                self.kosdq_buy_list.append(results[0])
-                self.kosdq_monitor_list.append(results[0])
+                self.buy_list.append(results[0])
+                self.monitor_list.append(results[0])
+
+        for name in kosdq_wish_names:
+            results = find_kosdaq_by_name(name, kosdq_records)
+            if results is None or len(results) == 0:
+                print(f"{name} 종목을 찾을 수 없습니다.")
+                exit(1)
+            else:
+                self.buy_list.append(results[0])
+                self.monitor_list.append(results[0])
 
         self.auth = KisAuth(app_key, app_secret, app_account, app_is_virtual, app_domain)
         self.auth.account.update()
@@ -126,14 +141,14 @@ class DayTradingBot:
         self.auth.account.update_stock()
 
         # 관심 종목들 현재가 조회 및 분석
-        for stock in self.kosdq_monitor_list:
+        for stock in self.monitor_list:
             symbol = self._stock_symbol(stock)
             if not symbol:
                 continue
             self.update_price(symbol)
 
         # 관심 종목들 중 매수 추천이 있는 종목이 있는지 확인
-        for stock in self.kosdq_monitor_list:
+        for stock in self.monitor_list:
             symbol = self._stock_symbol(stock)
             name = self._stock_name(stock)
             if not symbol:
@@ -161,7 +176,7 @@ class DayTradingBot:
             self.auth.account.update_stock()
 
         # 관심 종목중 매도가 필요한 종목이 있는지 확인
-        for stock in self.kosdq_monitor_list:
+        for stock in self.monitor_list:
             symbol = self._stock_symbol(stock)
             name = self._stock_name(stock)
             if not symbol:
@@ -202,7 +217,7 @@ class DayTradingBot:
     def get_dashboard_snapshot(self):
         symbol_to_name = {}
         watch_symbols = []
-        for item in self.kosdq_monitor_list:
+        for item in self.monitor_list:
             symbol = self._stock_symbol(item)
             if not symbol:
                 continue
@@ -317,15 +332,15 @@ class DayTradingBot:
         self.auth.account.update_stock()
 
         # self.kosdq_monitor_list에 매도 리스트 업데이트
-        self.kosdq_monitor_list = []
+        self.monitor_list = []
         # 먼저 매수 리스트에 있는 종목들을 모니터링 리스트에 추가
-        for item in self.kosdq_buy_list:
-            self.kosdq_monitor_list.append(item)
+        for item in self.buy_list:
+            self.monitor_list.append(item)
 
         # 재고로 가지고 있는 건 모두 모니터링 리스트에 추가
         for stock in self.auth.account.stocks:
-            if stock['pdno'] not in [self._stock_symbol(item) for item in self.kosdq_monitor_list]:
-                self.kosdq_monitor_list.append(stock)
+            if stock['pdno'] not in [self._stock_symbol(item) for item in self.monitor_list]:
+                self.monitor_list.append(stock)
                 
 
     def buy(self, symbol: str, quantity: int, price: float):

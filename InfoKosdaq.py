@@ -219,7 +219,7 @@ def find_by_code(code: str, records: List[KosdaqCode]) -> Optional[KosdaqCode]:
     return None
 
 
-def find_by_name(name: str, records: List[KosdaqCode]) -> List[KosdaqCode]:
+def find_kosdaq_by_name(name: str, records: List[KosdaqCode]) -> List[KosdaqCode]:
     """한글종목명 부분 문자열로 종목 검색"""
     return [r for r in records if name in r.hts_kor_isnm]
 
@@ -237,6 +237,6 @@ if __name__ == "__main__":
 
     # 인텍플러스 검색
     print("\n인텍플러스 검색:")
-    results = find_by_name("인텍플러스", records)
+    results = find_kosdaq_by_name("인텍플러스", records)
     for r in results:
         print(f"  [{r.mksc_shrn_iscd}] {r.hts_kor_isnm} / 상장일:{r.stck_lstn_date} / 기준가:{r.stck_sdpr}")
