@@ -45,15 +45,33 @@ class DayTradingBot:
 
         self.display_account_info()
         loop_count = 0
+        is_running = True
 
         while True:
             now = time.time()
 
             # 9:00 ~ 15:30 사이에만 동작하도록 설정
             if time.localtime(now).tm_hour < 9 or (time.localtime(now).tm_hour == 15 and time.localtime(now).tm_min > 30) or time.localtime(now).tm_hour > 15:
+                if is_running:
+                    print("장외 시간입니다. 9:00 ~ 15:30 사이에만 동작합니다.")
+                    self.price_analysis.save_cache()
+
                 # 장외 시간에는 동작하지 않음
+                is_running = False
                 time.sleep(60)
                 continue
+
+            # 토요일, 일요일에는 동작하지 않음 (장이 쉬는 날)
+            if time.localtime(now).tm_wday >= 5:
+                if is_running:
+                    print("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
+                    self.price_analysis.save_cache()
+
+                is_running = False
+                time.sleep(60)
+                continue
+
+            is_running = True
 
             # 관심 종목들 현재가 조회 및 분석
             for stock in self.kosdq_monitor_list:
