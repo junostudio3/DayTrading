@@ -9,6 +9,7 @@ class KisAuth:
         self.api_key = api_key
         self.secret_key = secret_key
         self.is_virtual = is_virtual
+        self.custtype = "P"  # 고객구분 (P: 개인, B: 법인)
         self.domain = domain
 
         # cache 폴더는 현재 디렉토리에 생성됩니다. 필요에 따라 경로를 변경할 수 있습니다.
@@ -23,6 +24,9 @@ class KisAuth:
 
         from KisAuthAccount import KisAuthAccount
         self.account = KisAuthAccount(self, account)
+
+        from KisAuthOrder import KisAuthOrder
+        self.order = KisAuthOrder(self)
 
     def _get_access_token(self):
         # 캐시된 토큰이 유효한지 확인
@@ -60,12 +64,29 @@ class KisAuth:
         else:
             raise Exception(f"Failed to get access token: {response.status_code} {response.text}")
 
-    def request(self, url, headers, params=None):
+    def request(self, url, tr_id, headers=None, params=None):
+        if headers is None:
+            headers = {}
+
         #headers에 authorization, appkey, appsecret를 포함시킨다
         headers.update({
             "authorization": f"Bearer {self._get_access_token()}",
             "appkey": self.api_key,
-            "appsecret": self.secret_key
+            "appsecret": self.secret_key,
+            "custtype": self.custtype,
+            "tr_id": tr_id
         })
 
-        return requests.get(f"{self.domain}/uapi/domestic-stock/v1/trading/inquire-balance", headers=headers, params=params)
+        return requests.get(f"{self.domain}{url}", headers=headers, params=params)
+
+    def request_post(self, url, tr_id, headers, params=None):
+        #headers에 authorization, appkey, appsecret를 포함시킨다
+        headers.update({
+            "authorization": f"Bearer {self._get_access_token()}",
+            "appkey": self.api_key,
+            "appsecret": self.secret_key,
+            "custtype": self.custtype,
+            "tr_id": tr_id
+        })
+
+        return requests.post(f"{self.domain}{url}", headers=headers, data=json.dumps(params))
