@@ -1,5 +1,6 @@
 import time
 from Candlestick import Candlestick
+import json
 
 class PriceAnalysisItem:
     def __init__(self, symbol, name):
@@ -15,6 +16,9 @@ class PriceAnalysisItem:
             new_candle.start_time = timestamp
             new_candle.end_time = timestamp
             self.candle_stick_5minute.append(new_candle)
+            if len(self.candle_stick_5minute) > 1000:  # 메모리 관리를 위해 오래된 캔들스틱 제거
+                self.candle_stick_5minute.pop(0)
+
         else:
             # 기존 캔들스틱 업데이트
             current_candle = self.candle_stick_5minute[-1]
@@ -84,8 +88,12 @@ class PriceAnalysisItem:
         return False
 
 class PriceAnalysis:
-    def __init__(self):
+    def __init__(self, cache_file):
+        self.cache_file = cache_file
         self.items: dict[str, PriceAnalysisItem] = {}
+
+        # 캐시 파일에서 데이터 로드
+        self.load_cache()
 
     def add_price(self, symbol, price):
         if symbol not in self.items:
@@ -106,3 +114,44 @@ class PriceAnalysis:
         if symbol in self.items:
             return self.items[symbol].is_sell_stop_loss_recommended(purchase_price)
         return False
+
+    def load_cache(self):
+        try:
+            with open(self.cache_file, 'r') as f:
+                cache_data = json.load(f)
+                for symbol, item_data in cache_data.items():
+                    item = PriceAnalysisItem(symbol, item_data['name'])
+                    for candle_data in item_data['candle_stick_5minute']:
+                        candle = Candlestick(
+                            open_price=candle_data['open_price'],
+                            close_price=candle_data['close_price'],
+                            high_price=candle_data['high_price'],
+                            low_price=candle_data['low_price']
+                        )
+                        candle.start_time = candle_data['start_time']
+                        candle.end_time = candle_data['end_time']
+                        item.candle_stick_5minute.append(candle)
+                    self.items[symbol] = item
+        except FileNotFoundError:
+            # 캐시 파일이 없는 경우 무시
+            pass
+    
+    def save_cache(self):
+        cache_data = {}
+        for symbol, item in self.items.items():
+            cache_data[symbol] = {
+                'name': item.name,
+                'candle_stick_5minute': [
+                    {
+                        'open_price': c.open_price,
+                        'close_price': c.close_price,
+                        'high_price': c.high_price,
+                        'low_price': c.low_price,
+                        'start_time': c.start_time,
+                        'end_time': c.end_time
+                    }
+                    for c in item.candle_stick_5minute
+                ]
+            }
+        with open(self.cache_file, 'w') as f:
+            json.dump(cache_data, f, indent=4)

@@ -31,7 +31,7 @@ class DayTradingBot:
         self.auth.account.update()
         self.update_sell_list()
 
-        self.price_analysis = PriceAnalysis()
+        self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
 
         # 아이템 별로 30일 평균가 조회
         #for stock in self.kosdq_buy_list:
@@ -44,8 +44,17 @@ class DayTradingBot:
         #print(f"QLD 현재가: {price}")
 
         self.display_account_info()
+        loop_count = 0
 
         while True:
+            now = time.time()
+
+            # 9:00 ~ 15:30 사이에만 동작하도록 설정
+            if time.localtime(now).tm_hour < 9 or (time.localtime(now).tm_hour == 15 and time.localtime(now).tm_min > 30) or time.localtime(now).tm_hour > 15:
+                # 장외 시간에는 동작하지 않음
+                time.sleep(60)
+                continue
+
             # 관심 종목들 현재가 조회 및 분석
             for stock in self.kosdq_monitor_list:
                 self.update_price(stock.mksc_shrn_iscd)
@@ -92,6 +101,10 @@ class DayTradingBot:
 
             # 1초마다 갱신
             time.sleep(1)
+            loop_count += 1
+            if loop_count % 60 == 0:
+                # 1분마다 캐시 저장
+                self.price_analysis.save_cache()
 
     def display_account_info(self):
         print(f"예수금: {self.auth.account.dnca_tot_amt}")
