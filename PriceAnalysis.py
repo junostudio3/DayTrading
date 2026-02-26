@@ -16,7 +16,7 @@ class PriceAnalysisItem:
             new_candle.start_time = timestamp
             new_candle.end_time = timestamp
             self.candle_stick_5minute.append(new_candle)
-            if len(self.candle_stick_5minute) > 1000:  # 메모리 관리를 위해 오래된 캔들스틱 제거
+            if len(self.candle_stick_5minute) > 200:  # 메모리 관리를 위해 오래된 캔들스틱 제거
                 self.candle_stick_5minute.pop(0)
 
         else:

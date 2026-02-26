@@ -1,5 +1,6 @@
 from KisAuth import KisAuth
 import enum
+import datetime
 
 class OrderDivision(enum.Enum):
     SETTLE = "00"  # 지정가
@@ -22,6 +23,41 @@ class KisAuthOrder:
     def immediately_sell(self, symbol: str, quantity: int):
         """즉시 매도 주문 (시장가)"""
         return self.order_cash(symbol, quantity, price=0, is_buy=False, division=OrderDivision.MARKET)
+    
+    # 매수/매도 체결 확인
+    def order_check(self, pd_no: str, order_no: str, is_buy: bool):
+        """주문 체결 확인"""
+
+        tr_id = "VTTC0081R" if self.auth.is_virtual else "TTTC0081R"
+        today = datetime.datetime.now().strftime("%Y%m%d")
+
+        response = self.auth.request(
+            url="/uapi/domestic-stock/v1/trading/inquire-daily-ccld",
+            tr_id=tr_id,  # 주문 상세 조회 트랜잭션 ID
+            params={
+                "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
+                "ACNT_PRDT_CD": "01",  # 계좌번호 체계(8-2)의 뒤 2자리
+                "INQR_STRT_DT": today,  # 조회 시작일 (YYYYMMDD)
+                "INQR_END_DT": today,  # 조회 종료일 (YYYYMMDD)
+                "SLL_BUY_DVSN_CD": "02" if is_buy else "01",  # 매도/매수 구분 코드 (00: 전체, 01: 매도, 02: 매수)
+                "INQR_DVSN": "00",  # 조회 구분 (00: 역순, 01: 순차)
+                "PDNO": pd_no, # 종목번호
+                "CCLD_DVSN": "00",  # 체결 구분 (00: 전체, 01: 체결, 02: 미체결)
+                "ORD_GNO_BRNO": "", # 주문시 한국투자증권 시스템에서 지정된 영업점코드
+                "ODNO": order_no, # 주문번호
+                "INQR_DVSN_3": "00", # 조회구분3 (00: 전체, 01: 현금, 02: 융자, 03: 대출, 04: 대주)
+                "INQR_DVSN_1": "", # 연속조회구분1 (공란)
+                "CTX_AREA_FK100": "", # 연속조회검색조건100 (공란)
+                "CTX_AREA_NK100": "", # 연속조회키100 (공란)
+            }
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("rt_cd") == "0" and "output1" in data:
+                return data["output1"]
+
+        return None
 
     # 매수/매도 주문 관련
     def order_cash(self, symbol: str, quantity: int, price: float, is_buy: bool, division: OrderDivision):
@@ -56,8 +92,8 @@ class KisAuthOrder:
 
         if response.status_code == 200:
             data = response.json()
-            if data.get("rt_cd") == "0":
-                return data
+            if data.get("rt_cd") == "0" and "output" in data:
+                return data["output"]
             else:
                 raise Exception(f"Failed to place {order_type} order: {data.get('msg_cd')} {data.get('msg1')}")
         else:

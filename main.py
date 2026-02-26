@@ -8,7 +8,23 @@ from InfoKosdaq import find_kosdaq_by_name, load_kosdaq_master
 from InfoKospi import find_kospi_by_name, load_kospi_master
 from PriceAnalysis import PriceAnalysis
 import time
+from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Any, Optional
+
+
+class TradeStep(Enum):
+    ORDER_BUY = auto()
+    CHECK_BUY = auto()
+    ORDER_SELL = auto()
+    CHECK_SELL = auto()
+
+
+@dataclass
+class TradeState:
+    step: TradeStep = TradeStep.ORDER_BUY
+    buy_order_no: str = ""
+    sell_order_no: str = ""
 
 class DayTradingBot:
     def __init__(self):
@@ -50,17 +66,16 @@ class DayTradingBot:
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.loop_count = 0
         self.is_running = True
+        self.symbol_states: dict[str, TradeState] = {}
 
-        # 아이템 별로 30일 평균가 조회
-        #for stock in self.kosdq_buy_list:
-        #    price = self.auth.price.get_average_price_30day(stock.mksc_shrn_iscd)
-        #    print(f"관심 종목: [{stock.mksc_shrn_iscd}] {stock.hts_kor_isnm} / 30일 평균가: {price}")
+        # 초기에 관심 종목 주식을 가지고 있다면 step을 3으로 시작한다.
+        for stock in self.auth.account.stocks:
+            symbol = stock.get('pdno', '')
+            if symbol in [self._stock_symbol(item) for item in self.buy_list]:
+                state = self._get_trade_state(symbol)
+                state.step = TradeStep.ORDER_SELL
 
     def run(self):
-        # QLD ETF의 현재가 조회 (미국 주식 예시)
-        #price = auth.price.get_current_overseas("QLD", "AMS")
-        #print(f"QLD 현재가: {price}")
-
         self.display_account_info()
         while True:
             self.process_once()
@@ -107,6 +122,92 @@ class DayTradingBot:
             return stock.get('prdt_name', stock.get('pdno', ''))
         return getattr(stock, 'hts_kor_isnm', self._stock_symbol(stock))
 
+    def _find_inventory(self, symbol: str):
+        return next((s for s in self.auth.account.stocks if s['pdno'] == symbol), None)
+
+    def _get_trade_state(self, symbol: str) -> TradeState:
+        if symbol not in self.symbol_states:
+            self.symbol_states[symbol] = TradeState()
+        return self.symbol_states[symbol]
+
+    def _process_step_order_buy(self, symbol: str, name: str):
+        state = self._get_trade_state(symbol)
+        inventory = self._find_inventory(symbol)
+        if inventory is not None:
+            return
+
+        if self.price_analysis.is_purchase_recommended(symbol) is False:
+            return
+
+        if symbol not in self.price_analysis.items or not self.price_analysis.items[symbol].candle_stick_5minute:
+            return
+
+        max_budget = 1000000
+        current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
+        quantity = int(max_budget // current_price)
+        if quantity <= 0:
+            return
+
+        order = self.buy(symbol, quantity, current_price)
+        order_no = order.get("ODNO", "")
+
+        print(f"매수 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
+        state.buy_order_no = order_no
+        state.step = TradeStep.CHECK_BUY
+
+    def _process_step_buy_check(self, symbol: str, _name: str):
+        state = self._get_trade_state(symbol)
+        if not state.buy_order_no:
+            state.step = TradeStep.ORDER_SELL
+            return
+
+        if self.check_order_completed(symbol, state.buy_order_no, True):
+            self.update_account_stock()
+            state.buy_order_no = ""
+            state.step = TradeStep.ORDER_SELL
+
+    def _process_order_sell(self, symbol: str, name: str):
+        state = self._get_trade_state(symbol)
+        inventory = self._find_inventory(symbol)
+        if inventory is None:
+            state.step = TradeStep.ORDER_BUY
+            state.sell_order_no = ""
+            return
+
+        purchase_price = float(inventory['pchs_avg_pric'])
+        quantity = int(inventory['hldg_qty'])
+
+        if self.price_analysis.is_sell_stop_loss_recommended(symbol, purchase_price):
+            current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price if symbol in self.price_analysis.items and self.price_analysis.items[symbol].candle_stick_5minute else 0
+            print(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
+            order = self.immediately_sell(symbol, quantity)
+            state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
+            state.step = TradeStep.CHECK_SELL
+            return
+
+        if not self.price_analysis.is_sell_recommended(symbol, purchase_price):
+            return
+
+        if symbol not in self.price_analysis.items or not self.price_analysis.items[symbol].candle_stick_5minute:
+            return
+
+        current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
+        order = self.sell(symbol, quantity, current_price)
+        print(f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
+        state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
+        state.step = TradeStep.CHECK_SELL
+
+    def _process_step_sell_check(self, symbol: str, _name: str):
+        state = self._get_trade_state(symbol)
+        if not state.sell_order_no:
+            state.step = TradeStep.ORDER_BUY
+            return
+
+        if self.check_order_completed(symbol, state.sell_order_no, False):
+            self.update_account_stock()
+            state.sell_order_no = ""
+            state.step = TradeStep.ORDER_BUY
+
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:
             now = time.time()
@@ -138,77 +239,34 @@ class DayTradingBot:
             return
 
         self.is_running = True
-        self.auth.account.update_stock()
 
-        # 관심 종목들 현재가 조회 및 분석
+        # 종목별 상태머신 동작
         for stock in self.monitor_list:
             symbol = self._stock_symbol(stock)
+            name = self._stock_name(stock)
             if not symbol:
                 continue
+
+            state = self._get_trade_state(symbol)
+
+            # 모든 step: 현재가 조회 및 분석(update_price)
             self.update_price(symbol)
+            step = state.step
 
-        # 관심 종목들 중 매수 추천이 있는 종목이 있는지 확인
-        for stock in self.monitor_list:
-            symbol = self._stock_symbol(stock)
-            name = self._stock_name(stock)
-            if not symbol:
-                continue
-
-            inventory = next((s for s in self.auth.account.stocks if s['pdno'] == symbol), None)
-            if inventory is not None:
-                continue  # 이미 재고가 있는 종목은 패스
-
-            if self.price_analysis.is_purchase_recommended(symbol) is False:
-                continue  # 매수 추천이 없는 종목은 패스
-
-            if symbol not in self.price_analysis.items or not self.price_analysis.items[symbol].candle_stick_5minute:
-                continue
-
-            max_budget = 1000000  # 최대 투자 금액 (예: 100만원)
-            current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
-            quantity = int(max_budget // current_price)  # 최대 투자 금액으로 살 수 있는 수량 계산
-            if quantity <= 0:
-                continue
-
-            # 구매
-            self.buy(symbol, quantity, current_price)
-            print(f"매수 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
-            self.auth.account.update_stock()
-
-        # 관심 종목중 매도가 필요한 종목이 있는지 확인
-        for stock in self.monitor_list:
-            symbol = self._stock_symbol(stock)
-            name = self._stock_name(stock)
-            if not symbol:
-                continue
-
-            # 재고가 없는 종목은 패스
-            inventory = next((s for s in self.auth.account.stocks if s['pdno'] == symbol), None)
-            if inventory is None:
-                continue
-
-            # 매입가격
-            purchase_price = float(inventory['pchs_avg_pric'])
-            # 매입수량
-            quantity = int(inventory['hldg_qty'])
-
-            # 손절 추천이 있는 종목은 바로 매도
-            if self.price_analysis.is_sell_stop_loss_recommended(symbol, purchase_price):
-                current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price if symbol in self.price_analysis.items and self.price_analysis.items[symbol].candle_stick_5minute else 0
-                print(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
-                self.immediately_sell(symbol, quantity)
-                continue
-
-            # 매도 추천이 없는 종목은 패스
-            if not self.price_analysis.is_sell_recommended(symbol, purchase_price):
-                continue
-
-            if symbol not in self.price_analysis.items or not self.price_analysis.items[symbol].candle_stick_5minute:
-                continue
-            current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
-            self.sell(symbol, quantity, current_price)
-            print(f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
-            self.auth.account.update_stock()
+            if step == TradeStep.ORDER_BUY:
+                # step1: 매수 가능 확인 (매수 주문 후 step2)
+                self._process_step_order_buy(symbol, name)
+            elif step == TradeStep.CHECK_BUY:
+                # step2: 체결 확인 자리(현재는 step3으로 패스)
+                self._process_step_buy_check(symbol, name)
+            elif step == TradeStep.ORDER_SELL:
+                # step3: 매도 가능 확인 (매도 주문 후 step4)
+                self._process_order_sell(symbol, name)
+            elif step == TradeStep.CHECK_SELL:
+                # step4: 체결 확인 자리(현재는 step1으로 패스)
+                self._process_step_sell_check(symbol, name)
+            else:
+                state.step = TradeStep.ORDER_BUY
 
         self.loop_count += 1
         if self.loop_count % 60 == 0:
@@ -249,6 +307,7 @@ class DayTradingBot:
                 "buy": buy_recommended,
                 "sell": sell_recommended,
                 "stop": stop_loss_recommended,
+                "step": self._get_trade_state(symbol).step.name,
             })
 
         holdings_rows = []
@@ -300,7 +359,7 @@ class DayTradingBot:
                 raise RuntimeError("현재가를 가져오지 못해 주문할 수 없습니다.")
 
         result = self.buy(symbol, quantity, price)
-        self.auth.account.update_stock()
+        self.update_account_stock()
         return result
 
     def place_manual_sell(self, symbol: str, quantity: int):
@@ -325,11 +384,11 @@ class DayTradingBot:
                 raise RuntimeError("현재가를 가져오지 못해 주문할 수 없습니다.")
 
         result = self.sell(symbol, quantity, price)
-        self.auth.account.update_stock()
+        self.update_account_stock()
         return result
 
     def update_sell_list(self):
-        self.auth.account.update_stock()
+        self.update_account_stock()
 
         # self.kosdq_monitor_list에 매도 리스트 업데이트
         self.monitor_list = []
@@ -341,7 +400,16 @@ class DayTradingBot:
         for stock in self.auth.account.stocks:
             if stock['pdno'] not in [self._stock_symbol(item) for item in self.monitor_list]:
                 self.monitor_list.append(stock)
-                
+
+    def update_account_stock(self):
+        while True:
+            try:
+                self.auth.account.update_stock()
+                break
+            except Exception as e:
+                print(f"계좌 정보 업데이트 실패: {e}")
+                time.sleep(1)  # 잠시 대기 후 재시도
+                continue
 
     def buy(self, symbol: str, quantity: int, price: float):
         """현금 매수 주문"""
@@ -350,6 +418,21 @@ class DayTradingBot:
                 return self.auth.order.buy_order_cash(symbol, quantity, price)
             except Exception as e:
                 print(f"매수 주문 실패: {e}")
+                time.sleep(1)  # 잠시 대기 후 재시도
+                continue
+
+    def check_order_completed(self, pd_no: str, order_no: str, is_buy: bool):
+        """매수 주문 체결 여부 확인"""
+        while True:
+            try:
+                check_list = self.auth.order.order_check(pd_no, order_no, is_buy)
+                for check in check_list:
+                    if check.get("rmn_qty", "0") != "0":
+                        # 잔여수량 0이 아니면 체결 안된 것으로 간주
+                        return False
+                return True
+            except Exception as e:
+                print(f"매수 주문 체결 확인 실패: {e}")
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
