@@ -16,7 +16,7 @@ class KisAuthOrder:
         return self.order_cash(symbol, quantity, price, is_buy=True, division=division)
     
     # 매도 주문
-    def sell_order_cash(self, symbol: str, quantity: int, price: float, division: OrderDivision = OrderDivision.SETTLE):
+    def sell_order_cash(self, symbol: str, quantity: int, price: int, division: OrderDivision = OrderDivision.SETTLE):
         """현금 매도 주문"""
         return self.order_cash(symbol, quantity, price, is_buy=False, division=division)
     

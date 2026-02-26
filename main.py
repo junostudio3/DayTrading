@@ -27,7 +27,12 @@ class TradeState:
     sell_order_no: str = ""
 
 class DayTradingBot:
-    def __init__(self):
+    def __init__(self, log_callback=None):
+        # logger callback used for emitting messages; defaults to built-in print
+        # TradingEngine will override this after construction so that all
+        # bot-generated messages get forwarded to engine._append_log.
+        self.log = log_callback or print
+
         kosdq_records = load_kosdaq_master()
 
         # 관심 종목을 리스트로 수집
@@ -44,7 +49,7 @@ class DayTradingBot:
         for name in kospi_wish_names:
             results = find_kospi_by_name(name, load_kospi_master())
             if results is None or len(results) == 0:
-                print(f"{name} 종목을 찾을 수 없습니다.")
+                self.log(f"{name} 종목을 찾을 수 없습니다.")
                 exit(1)
             else:
                 self.buy_list.append(results[0])
@@ -53,7 +58,7 @@ class DayTradingBot:
         for name in kosdq_wish_names:
             results = find_kosdaq_by_name(name, kosdq_records)
             if results is None or len(results) == 0:
-                print(f"{name} 종목을 찾을 수 없습니다.")
+                self.log(f"{name} 종목을 찾을 수 없습니다.")
                 exit(1)
             else:
                 self.buy_list.append(results[0])
@@ -82,15 +87,15 @@ class DayTradingBot:
             time.sleep(1)
 
     def display_account_info(self):
-        print(f"예수금: {self.auth.account.dnca_tot_amt}")
-        print(f"D+1 예수금: {self.auth.account.nxdy_excc_amt}")
-        print(f"D+2 예수금: {self.auth.account.prvs_rcdl_excc_amt}")
-        print("주식 잔고:", end=" ")
+        self.log(f"예수금: {self.auth.account.dnca_tot_amt}")
+        self.log(f"D+1 예수금: {self.auth.account.nxdy_excc_amt}")
+        self.log(f"D+2 예수금: {self.auth.account.prvs_rcdl_excc_amt}")
+        self.log("주식 잔고:")
         if not self.auth.account.stocks:
-            print("보유 주식이 없습니다.")
+            self.log("보유 주식이 없습니다.")
         else:
             for stock in self.auth.account.stocks:
-                print(f"종목번호: {stock['pdno']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
+                self.log(f"종목번호: {stock['pdno']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
     def update_price(self, symbol: str):
         """단일 종목의 현재가 조회"""
@@ -102,14 +107,14 @@ class DayTradingBot:
             except Exception as e:
                 error_count += 1
                 if error_count >= 5:
-                    print(f"Error fetching current price for {symbol} after 5 attempts: {e}")
+                    self.log(f"Error fetching current price for {symbol} after 5 attempts: {e}")
                     return None
 
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
         self.price_analysis.add_price(symbol, price)
-        print(f"관심 종목: [{symbol}] / 현재가: {price}")
+        print(f"관심 종목: [{symbol}] / 현재가: {price}") # 로그에 남기기에는 너무 많으므로 콘솔에 출력하도록 변경
         return price
 
     def _stock_symbol(self, stock: Any) -> str:
@@ -151,7 +156,7 @@ class DayTradingBot:
         order = self.buy(symbol, quantity, current_price)
         order_no = order.get("ODNO", "")
 
-        print(f"매수 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
+        self.log(f"매수 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
         state.buy_order_no = order_no
         state.step = TradeStep.CHECK_BUY
 
@@ -179,7 +184,7 @@ class DayTradingBot:
 
         if self.price_analysis.is_sell_stop_loss_recommended(symbol, purchase_price):
             current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price if symbol in self.price_analysis.items and self.price_analysis.items[symbol].candle_stick_5minute else 0
-            print(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
+            self.log(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
             order = self.immediately_sell(symbol, quantity)
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.step = TradeStep.CHECK_SELL
@@ -191,9 +196,9 @@ class DayTradingBot:
         if symbol not in self.price_analysis.items or not self.price_analysis.items[symbol].candle_stick_5minute:
             return
 
-        current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
+        current_price = int(self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price)
         order = self.sell(symbol, quantity, current_price)
-        print(f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
+        self.log(f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.step = TradeStep.CHECK_SELL
 
@@ -230,9 +235,9 @@ class DayTradingBot:
         if not self.is_market_open(now):
             if self.is_running:
                 if time.localtime(now).tm_wday >= 5:
-                    print("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
+                    self.log("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
                 else:
-                    print("장외 시간입니다. 9:00 ~ 15:30 사이에만 동작합니다.")
+                    self.log("장외 시간입니다. 9:00 ~ 15:30 사이에만 동작합니다.")
                 self.price_analysis.save_cache()
 
             self.is_running = False
@@ -407,7 +412,7 @@ class DayTradingBot:
                 self.auth.account.update_stock()
                 break
             except Exception as e:
-                print(f"계좌 정보 업데이트 실패: {e}")
+                self.log(f"계좌 정보 업데이트 실패: {e}")
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
@@ -417,12 +422,12 @@ class DayTradingBot:
             try:
                 return self.auth.order.buy_order_cash(symbol, quantity, price)
             except Exception as e:
-                print(f"매수 주문 실패: {e}")
+                self.log(f"매수 주문 실패: {e}")
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
     def check_order_completed(self, pd_no: str, order_no: str, is_buy: bool):
-        """매수 주문 체결 여부 확인"""
+        """매도/매수 주문 체결 여부 확인"""
         while True:
             try:
                 check_list = self.auth.order.order_check(pd_no, order_no, is_buy)
@@ -432,17 +437,21 @@ class DayTradingBot:
                         return False
                 return True
             except Exception as e:
-                print(f"매수 주문 체결 확인 실패: {e}")
+                if is_buy:
+                    self.log(f"매수 주문 체결 확인 실패: {e}")
+                else:
+                    self.log(f"매도 주문 체결 확인 실패: {e}")
+
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
-    def sell(self, symbol: str, quantity: int, price: float):
+    def sell(self, symbol: str, quantity: int, price: int):
         """현금 매도 주문"""
         while True:
             try:
                 return self.auth.order.sell_order_cash(symbol, quantity, price)
             except Exception as e:
-                print(f"매도 주문 실패: {e}")
+                self.log(f"매도 주문 실패: {e}")
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
     
@@ -454,7 +463,7 @@ class DayTradingBot:
                 self.update_sell_list()
                 return result
             except Exception as e:
-                print(f"즉시 매도 주문 실패: {e}")
+                self.log(f"즉시 매도 주문 실패: {e}")
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 

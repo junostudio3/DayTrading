@@ -10,6 +10,11 @@ from main import DayTradingBot
 class TradingEngine:
     def __init__(self, bot: DayTradingBot, interval_seconds: int = 3):
         self.bot = bot
+        # hook engine logging into the bot so that any message the bot emits
+        # via its `log` attribute will be funneled through _append_log.
+        # This allows automated orders from the bot to appear in engine logs.
+        self.bot.log = self._append_log
+
         self.interval_seconds = max(2, min(5, interval_seconds))
         self._stop_event = threading.Event()
         self._order_queue: queue.Queue[dict[str, Any]] = queue.Queue()
