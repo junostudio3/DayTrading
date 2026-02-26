@@ -73,26 +73,43 @@ class PriceAnalysisItem:
         conn.commit()
         conn.close()
 
+    def _get_5min_bucket(self, ts: float):
+        return ts - (ts % 300)
+
     def add_price(self, price):
         timestamp = time.time()
-        if not self.candle_stick_5minute or timestamp - self.candle_stick_5minute[-1].start_time >= 300:
+        bucket = self._get_5min_bucket(timestamp)
+
+        if not self.candle_stick_5minute:
             # 새로운 캔들스틱 생성
             new_candle = Candlestick(price, price, price, price)
             new_candle.start_time = timestamp
             new_candle.end_time = timestamp
             self.candle_stick_5minute.append(new_candle)
             self._insert_candle(new_candle)
-            if len(self.candle_stick_5minute) > 200:  # 메모리 관리를 위해 오래된 캔들스틱 제거
+            return
+
+        last_candle = self.candle_stick_5minute[-1]
+
+        # 같은 5분 구간이면 업데이트
+        if last_candle.start_time == bucket:
+            last_candle.close_price = price
+            last_candle.high_price = max(last_candle.high_price, price)
+            last_candle.low_price = min(last_candle.low_price, price)
+            self._insert_candle(last_candle)
+
+        # 새로운 5분 구간이면 새 봉 생성
+        elif bucket > last_candle.start_time:
+            new_candle = Candlestick(price, price, price, price)
+            new_candle.start_time = bucket
+            new_candle.end_time = bucket + 300
+            self.candle_stick_5minute.append(new_candle)
+            self._insert_candle(new_candle)
+
+            # 메모리 관리
+            if len(self.candle_stick_5minute) > 200:
                 oldest = self.candle_stick_5minute.pop(0)
                 self._delete_candle(oldest.start_time)
-        else:
-            # 기존 캔들스틱 업데이트
-            current_candle = self.candle_stick_5minute[-1]
-            current_candle.end_time = timestamp
-            current_candle.close_price = price
-            current_candle.high_price = max(current_candle.high_price, price)
-            current_candle.low_price = min(current_candle.low_price, price)
-            self._insert_candle(current_candle)
         
     def is_purchase_recommended(self):
         # 구매 추천 로직
@@ -116,6 +133,11 @@ class PriceAnalysisItem:
             return False
 
         # 20이평 > 60이평 이면
+        prev_20 = sum(c.close_price for c in self.candle_stick_5minute[-21:-1]) / 20
+        if average_20 <= prev_20:
+            return False
+
+        # 이평이 위로 뚫고 올라오는 모양이면
         if self.candle_stick_5minute[-1].close_price < average_20:
             return False
 
