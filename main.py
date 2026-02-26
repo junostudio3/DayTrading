@@ -34,6 +34,7 @@ class DayTradingBot:
         self.log = log_callback or print
 
         kosdq_records = load_kosdaq_master()
+        kospi_records = load_kospi_master()
 
         # 관심 종목을 리스트로 수집
         kospi_wish_names = []
@@ -47,7 +48,7 @@ class DayTradingBot:
 
         # 관심 종목 정보 수집
         for name in kospi_wish_names:
-            results = find_kospi_by_name(name, load_kospi_master())
+            results = find_kospi_by_name(name, kospi_records)
             if results is None or len(results) == 0:
                 self.log(f"{name} 종목을 찾을 수 없습니다.")
                 exit(1)
@@ -74,8 +75,7 @@ class DayTradingBot:
         self.symbol_states: dict[str, TradeState] = {}
 
         # 초기에 관심 종목 주식을 가지고 있다면 step을 3으로 시작한다.
-        for stock in self.auth.account.stocks:
-            symbol = stock.get('pdno', '')
+        for symbol in self.auth.account.stocks_by_symbol.keys():
             if symbol in [self._stock_symbol(item) for item in self.buy_list]:
                 state = self._get_trade_state(symbol)
                 state.step = TradeStep.ORDER_SELL
@@ -113,8 +113,9 @@ class DayTradingBot:
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
-        self.price_analysis.add_price(symbol, price)
-        print(f"관심 종목: [{symbol}] / 현재가: {price}") # 로그에 남기기에는 너무 많으므로 콘솔에 출력하도록 변경
+        if self.price_analysis.add_price(symbol, price):
+            # 가격이 업데이트된 경우에만 로그를 남기도록 변경
+            print(f"관심 종목: [{symbol}] / 현재가: {price}") # 로그에 남기기에는 너무 많으므로 콘솔에 출력하도록 변경
         return price
 
     def _stock_symbol(self, stock: Any) -> str:
@@ -128,7 +129,7 @@ class DayTradingBot:
         return getattr(stock, 'hts_kor_isnm', self._stock_symbol(stock))
 
     def _find_inventory(self, symbol: str):
-        return next((s for s in self.auth.account.stocks if s['pdno'] == symbol), None)
+        return self.auth.account.stocks_by_symbol.get(symbol)
 
     def _get_trade_state(self, symbol: str) -> TradeState:
         if symbol not in self.symbol_states:
@@ -299,7 +300,7 @@ class DayTradingBot:
                 current_price = item.candle_stick_5minute[-1].close_price
                 buy_recommended = self.price_analysis.is_purchase_recommended(symbol)
 
-                inventory = next((s for s in self.auth.account.stocks if s['pdno'] == symbol), None)
+                inventory = self.auth.account.stocks_by_symbol.get(symbol)
                 if inventory is not None:
                     purchase_price = float(inventory['pchs_avg_pric'])
                     sell_recommended = self.price_analysis.is_sell_recommended(symbol, purchase_price)
@@ -373,7 +374,7 @@ class DayTradingBot:
         if not self.is_market_open():
             raise ValueError("장외 시간에는 주문할 수 없습니다.")
 
-        inventory = next((s for s in self.auth.account.stocks if s['pdno'] == symbol), None)
+        inventory = self.auth.account.stocks_by_symbol.get(symbol)
         if inventory is None:
             raise ValueError("보유하지 않은 종목입니다.")
 

@@ -76,7 +76,7 @@ class PriceAnalysisItem:
     def _get_5min_bucket(self, ts: float):
         return ts - (ts % 300)
 
-    def add_price(self, price):
+    def add_price(self, price) -> bool:
         timestamp = time.time()
         bucket = self._get_5min_bucket(timestamp)
 
@@ -87,16 +87,18 @@ class PriceAnalysisItem:
             new_candle.end_time = timestamp
             self.candle_stick_5minute.append(new_candle)
             self._insert_candle(new_candle)
-            return
+            return True
 
         last_candle = self.candle_stick_5minute[-1]
 
         # 같은 5분 구간이면 업데이트
         if last_candle.start_time == bucket:
+            changed = last_candle.close_price != price # 가격이 변경된 경우에만 True 반환
             last_candle.close_price = price
             last_candle.high_price = max(last_candle.high_price, price)
             last_candle.low_price = min(last_candle.low_price, price)
             self._insert_candle(last_candle)
+            return changed
 
         # 새로운 5분 구간이면 새 봉 생성
         elif bucket > last_candle.start_time:
@@ -110,6 +112,8 @@ class PriceAnalysisItem:
             if len(self.candle_stick_5minute) > 200:
                 oldest = self.candle_stick_5minute.pop(0)
                 self._delete_candle(oldest.start_time)
+            
+            return True
         
     def is_purchase_recommended(self):
         # 구매 추천 로직
@@ -200,10 +204,14 @@ class PriceAnalysis:
             item = PriceAnalysisItem(symbol, symbol, self.cache_dir)
             self.items[symbol] = item
 
-    def add_price(self, symbol, price):
+    def add_price(self, symbol, price) -> bool:
+        is_changed = False
         if symbol not in self.items:
             self.items[symbol] = PriceAnalysisItem(symbol, symbol, self.cache_dir)  # 이름은 심볼로 초기화
-        self.items[symbol].add_price(price)
+            is_changed = True
+        if self.items[symbol].add_price(price):
+            is_changed = True
+        return is_changed
 
     def is_purchase_recommended(self, symbol):
         if symbol in self.items:
