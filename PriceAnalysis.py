@@ -1,12 +1,77 @@
+import os
 import time
+import sqlite3
 from Candlestick import Candlestick
 import json
 
 class PriceAnalysisItem:
-    def __init__(self, symbol, name):
+    def __init__(self, symbol, name, cache_dir):
         self.symbol = symbol
         self.name = name
         self.candle_stick_5minute: list[Candlestick] = []
+        # path to SQLite file for this symbol
+        self.db_path = os.path.join(cache_dir, f"{symbol}.db")
+        self._ensure_db()
+        self._load_from_db()
+
+    def _ensure_db(self):
+        # create database file and table if missing
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS candles(
+                start_time REAL PRIMARY KEY,
+                end_time REAL,
+                open_price REAL,
+                high_price REAL,
+                low_price REAL,
+                close_price REAL
+            )"""
+        )
+        conn.commit()
+        conn.close()
+
+    def _db_connect(self):
+        return sqlite3.connect(self.db_path)
+
+    def _load_from_db(self):
+        # load all rows sorted by time
+        conn = self._db_connect()
+        c = conn.cursor()
+        for row in c.execute(
+            "SELECT start_time, end_time, open_price, high_price, low_price, close_price "
+            "FROM candles ORDER BY start_time"
+        ):
+            candle = Candlestick(row[2], row[3], row[4], row[5])
+            candle.start_time = row[0]
+            candle.end_time = row[1]
+            self.candle_stick_5minute.append(candle)
+        conn.close()
+
+    def _insert_candle(self, candle: Candlestick):
+        conn = self._db_connect()
+        c = conn.cursor()
+        c.execute(
+            "INSERT OR REPLACE INTO candles(start_time, end_time, open_price, high_price, low_price, close_price) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                candle.start_time,
+                candle.end_time,
+                candle.open_price,
+                candle.high_price,
+                candle.low_price,
+                candle.close_price,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def _delete_candle(self, start_time: float):
+        conn = self._db_connect()
+        c = conn.cursor()
+        c.execute("DELETE FROM candles WHERE start_time = ?", (start_time,))
+        conn.commit()
+        conn.close()
 
     def add_price(self, price):
         timestamp = time.time()
@@ -16,9 +81,10 @@ class PriceAnalysisItem:
             new_candle.start_time = timestamp
             new_candle.end_time = timestamp
             self.candle_stick_5minute.append(new_candle)
+            self._insert_candle(new_candle)
             if len(self.candle_stick_5minute) > 200:  # 메모리 관리를 위해 오래된 캔들스틱 제거
-                self.candle_stick_5minute.pop(0)
-
+                oldest = self.candle_stick_5minute.pop(0)
+                self._delete_candle(oldest.start_time)
         else:
             # 기존 캔들스틱 업데이트
             current_candle = self.candle_stick_5minute[-1]
@@ -26,6 +92,7 @@ class PriceAnalysisItem:
             current_candle.close_price = price
             current_candle.high_price = max(current_candle.high_price, price)
             current_candle.low_price = min(current_candle.low_price, price)
+            self._insert_candle(current_candle)
         
     def is_purchase_recommended(self):
         # 구매 추천 로직
@@ -89,15 +156,31 @@ class PriceAnalysisItem:
 
 class PriceAnalysis:
     def __init__(self, cache_file):
+        # cache_file originally pointed to a json file; we treat its dirname as
+        # the directory that will contain per-symbol databases.
         self.cache_file = cache_file
+        self.cache_dir = os.path.dirname(cache_file) or "."
+        os.makedirs(self.cache_dir, exist_ok=True)
         self.items: dict[str, PriceAnalysisItem] = {}
 
-        # 캐시 파일에서 데이터 로드
-        self.load_cache()
+        # load any existing symbol databases
+        self._load_cache()
+
+    def _load_cache(self):
+        # load per-symbol databases
+        for fname in os.listdir(self.cache_dir):
+            if not fname.endswith(".db"):
+                continue
+            symbol = fname[:-3]
+            if symbol in self.items:
+                # already loaded via migration
+                continue
+            item = PriceAnalysisItem(symbol, symbol, self.cache_dir)
+            self.items[symbol] = item
 
     def add_price(self, symbol, price):
         if symbol not in self.items:
-            self.items[symbol] = PriceAnalysisItem(symbol, symbol)  # 이름은 심볼로 초기화
+            self.items[symbol] = PriceAnalysisItem(symbol, symbol, self.cache_dir)  # 이름은 심볼로 초기화
         self.items[symbol].add_price(price)
 
     def is_purchase_recommended(self, symbol):
@@ -115,43 +198,12 @@ class PriceAnalysis:
             return self.items[symbol].is_sell_stop_loss_recommended(purchase_price)
         return False
 
-    def load_cache(self):
-        try:
-            with open(self.cache_file, 'r') as f:
-                cache_data = json.load(f)
-                for symbol, item_data in cache_data.items():
-                    item = PriceAnalysisItem(symbol, item_data['name'])
-                    for candle_data in item_data['candle_stick_5minute']:
-                        candle = Candlestick(
-                            open_price=candle_data['open_price'],
-                            close_price=candle_data['close_price'],
-                            high_price=candle_data['high_price'],
-                            low_price=candle_data['low_price']
-                        )
-                        candle.start_time = candle_data['start_time']
-                        candle.end_time = candle_data['end_time']
-                        item.candle_stick_5minute.append(candle)
-                    self.items[symbol] = item
-        except FileNotFoundError:
-            # 캐시 파일이 없는 경우 무시
-            pass
-    
+    # legacy save/load methods are retained for backward compatibility
     def save_cache(self):
-        cache_data = {}
-        for symbol, item in self.items.items():
-            cache_data[symbol] = {
-                'name': item.name,
-                'candle_stick_5minute': [
-                    {
-                        'open_price': c.open_price,
-                        'close_price': c.close_price,
-                        'high_price': c.high_price,
-                        'low_price': c.low_price,
-                        'start_time': c.start_time,
-                        'end_time': c.end_time
-                    }
-                    for c in item.candle_stick_5minute
-                ]
-            }
-        with open(self.cache_file, 'w') as f:
-            json.dump(cache_data, f, indent=4)
+        # no-op for new per-symbol sqlite storage; data written incrementally
+        pass
+
+    # keep old method name around but unused
+    def load_cache(self):
+        # kept for compatibility; actual loading is done in __init__
+        self._load_cache()
