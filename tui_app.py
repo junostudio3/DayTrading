@@ -90,6 +90,7 @@ class DayTradingTUI(App):
         self._watch_symbols: list[str] = []
         self._holding_symbols: list[str] = []
         self._rendered_log_size = 0
+        self._last_rendered_timestamp: float | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -121,10 +122,15 @@ class DayTradingTUI(App):
         if not snapshot:
             return
 
+        snapshot_timestamp = snapshot.get("timestamp")
+        if snapshot_timestamp == self._last_rendered_timestamp:
+            return
+        self._last_rendered_timestamp = snapshot_timestamp
+
         account = snapshot.get("account", {})
         market_open = snapshot.get("market_open", False)
         loop_count = snapshot.get("loop_count", 0)
-        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(snapshot.get("timestamp", time.time())))
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(snapshot_timestamp or time.time()))
         market_text = "장중" if market_open else "장외"
 
         summary = self.query_one("#summary", Static)
