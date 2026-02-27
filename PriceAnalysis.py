@@ -2,7 +2,6 @@ import os
 import time
 import sqlite3
 from Candlestick import Candlestick
-import json
 
 class PriceAnalysisItem:
     def __init__(self, symbol, name, cache_dir):
@@ -116,7 +115,14 @@ class PriceAnalysisItem:
             return True
         
     def is_purchase_recommended(self):
-        return self._is_purchase_trend_recommended()
+        if self._is_purchase_trend_recommended():
+            return True
+        if self._is_pullback_buy():
+            return True
+        if self._is_breakout_buy():
+            return True
+
+        return False
 
     # 구매 추세 조건    
     def _is_purchase_trend_recommended(self):
@@ -163,6 +169,47 @@ class PriceAnalysisItem:
 
         # 상승 추세라고 판단하여 구매 추천
         return True
+    
+    def _is_pullback_buy(self):
+        # 눌림목 구매 추천 로직
+        # 20이평 > 60이평 이면서, 최근 5분봉이 20이평을 뚫고 올라오는 모양이면 구매 추천
+        candles = self.candle_stick_5minute
+        if len(candles) < 60:
+            return False
+
+        closes = [c.close_price for c in candles]
+        ma20 = sum(closes[-20:]) / 20
+        ma60 = sum(closes[-60:]) / 60
+
+        if ma20 <= ma60:
+            return False
+
+        prev_close = closes[-2]
+        last_close = closes[-1]
+
+        # 눌림 후 복귀
+        if prev_close < ma20 and last_close > ma20:
+            if candles[-1].is_bullish():
+                return True
+
+        return False
+    
+    def _is_breakout_buy(self):
+        # 돌파 구매 추천 로직
+        # 최근 5분봉이 최근 1시간 내 고점(20이평 이상)을 뚫고 올라오는 모양이면 구매 추천
+
+        candles = self.candle_stick_5minute
+        if len(candles) < 15:
+            return False
+
+        recent_high = max(c.high_price for c in candles[-11:-1])
+        last_candle = candles[-1]
+
+        if last_candle.close_price > recent_high:
+            if last_candle.is_bullish():
+                return True
+
+        return False
     
     def is_sell_recommended(self, purchase_price):
         # 판매 추천 로직

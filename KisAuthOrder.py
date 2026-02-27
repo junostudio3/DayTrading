@@ -11,7 +11,7 @@ class KisAuthOrder:
         self.auth = auth
 
     # 매수 주문
-    def buy_order_cash(self, symbol: str, quantity: int, price: float, division: OrderDivision = OrderDivision.SETTLE):
+    def buy_order_cash(self, symbol: str, quantity: int, price: int, division: OrderDivision = OrderDivision.SETTLE):
         """현금 매수 주문"""
         return self.order_cash(symbol, quantity, price, is_buy=True, division=division)
     
@@ -60,7 +60,7 @@ class KisAuthOrder:
         return None
 
     # 매수/매도 주문 관련
-    def order_cash(self, symbol: str, quantity: int, price: float, is_buy: bool, division: OrderDivision):
+    def order_cash(self, symbol: str, quantity: int, price: int, is_buy: bool, division: OrderDivision):
         """현금 매수/매도 주문"""
 
         if self.auth.is_virtual and division == OrderDivision.MARKET:

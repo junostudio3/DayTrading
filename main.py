@@ -75,6 +75,7 @@ class DayTradingBot:
         self.loop_count = 0
         self.is_running = True
         self.symbol_states: dict[str, TradeState] = {}
+        self.buy_fail_counts: dict[str, int] = {}
 
         # 초기에 관심 종목 주식을 가지고 있다면 step을 3으로 시작한다.
         for symbol in self.auth.account.stocks_by_symbol.keys():
@@ -163,15 +164,39 @@ class DayTradingBot:
             return
 
         max_budget = 1000000
-        current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
+        current_price = int(self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price)
         quantity = int(max_budget // current_price)
         if quantity <= 0:
             return
 
-        order = self.buy(symbol, quantity, current_price)
+        fail_count = self.buy_fail_counts.get(symbol, 0)
+        order_quantity = quantity
+        if fail_count >= 10 and order_quantity > 1:
+            order_quantity -= 1
+            self.log(
+                f"[{symbol}] {name} 매수 연속 실패 {fail_count}회로 수량을 1 감소하여 재시도합니다. "
+                f"({quantity} -> {order_quantity})"
+            )
+
+        order = self.buy(symbol, order_quantity, current_price)
+        if order is None:
+            self.buy_fail_counts[symbol] = fail_count + 1
+            self.log(
+                f"매수 주문이 실패했습니다: [{symbol}] {name} / 수량: {order_quantity} / 가격: {current_price} "
+                f"/ 연속 실패: {self.buy_fail_counts[symbol]}"
+            )
+
+            if self.buy_fail_counts[symbol] >= 20:
+                self.log(f"[{symbol}] {name} 매수 연속 실패가 20회에 도달하여 Fail 관련 카운트를 초기화합니다.")
+                self.buy_fail_counts[symbol] = 0  # 실패 카운트 초기화
+
+            return
+
+        self.buy_fail_counts[symbol] = 0
+
         order_no = order.get("ODNO", "")
 
-        self.log(f"매수 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
+        self.log(f"매수 주문: [{symbol}] {name} / 수량: {order_quantity} / 가격: {current_price}")
         state.buy_order_no = order_no
         state.step = TradeStep.CHECK_BUY
 
@@ -452,15 +477,13 @@ class DayTradingBot:
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
-    def buy(self, symbol: str, quantity: int, price: float):
+    def buy(self, symbol: str, quantity: int, price: int):
         """현금 매수 주문"""
-        while True:
-            try:
-                return self.auth.order.buy_order_cash(symbol, quantity, price)
-            except Exception as e:
-                self.log(f"매수 주문 실패: {e}")
-                time.sleep(1)  # 잠시 대기 후 재시도
-                continue
+        try:
+            return self.auth.order.buy_order_cash(symbol, quantity, price)
+        except Exception as e:
+            self.log(f"매수 주문 실패: {e}")
+            return None
 
     def check_order_completed(self, pd_no: str, order_no: str, is_buy: bool):
         """매도/매수 주문 체결 여부 확인"""
