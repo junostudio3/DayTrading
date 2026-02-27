@@ -116,39 +116,48 @@ class PriceAnalysisItem:
             return True
         
     def is_purchase_recommended(self):
-        # 구매 추천 로직
-
-        if self._is_purchase_trend_recommended():
-            return True
-
-        return False
+        return self._is_purchase_trend_recommended()
 
     # 구매 추세 조건    
     def _is_purchase_trend_recommended(self):
         # 구매 추세 추천 로직
 
-        if len(self.candle_stick_5minute) < 60:
+        candles = self.candle_stick_5minute
+        candle_count = len(candles)
+        if candle_count < 60:
             return False
 
         # 5분봉이 5시간 이상 쌓였을 때 분석 시작
-        average_20 = sum(c.close_price for c in self.candle_stick_5minute[-20:]) / 20
-        average_60 = sum(c.close_price for c in self.candle_stick_5minute[-60:]) / 60
+        sum_60 = 0.0
+        sum_20 = 0.0
+        start_60 = candle_count - 60
+        start_20 = candle_count - 20
+
+        for idx in range(start_60, candle_count):
+            close_price = candles[idx].close_price
+            sum_60 += close_price
+            if idx >= start_20:
+                sum_20 += close_price
+
+        average_20 = sum_20 / 20
+        average_60 = sum_60 / 60
         if average_20 < average_60:
             return False
 
         # 20이평 > 60이평 이면
-        prev_20 = sum(c.close_price for c in self.candle_stick_5minute[-21:-1]) / 20
+        last_close_price = candles[-1].close_price
+        prev_20 = (sum_20 - last_close_price + candles[candle_count - 21].close_price) / 20
         if average_20 <= prev_20:
             return False
 
         # 이평이 위로 뚫고 올라오는 모양이면
-        if self.candle_stick_5minute[-1].close_price < average_20:
+        if last_close_price < average_20:
             return False
 
         # 현재가 > 20이평 이면
         # 최근 3봉 중 2봉 이상 양봉이면
-        recent_candles = self.candle_stick_5minute[-3:]
-        bullish_count = sum(1 for c in recent_candles if c.is_bullish())
+        recent_candles = candles[-3:]
+        bullish_count = sum(1 for candle in recent_candles if candle.is_bullish())
         if bullish_count < 2:
             return False
 
@@ -157,28 +166,26 @@ class PriceAnalysisItem:
     
     def is_sell_recommended(self, purchase_price):
         # 판매 추천 로직
-        timestamp = time.time()
-
         # 익절 로직
         # 마지막 캔들스틱의 종가를 기준으로 purchase_price 대비 2% 이상 상승했을 때 판매 추천
-        if self.candle_stick_5minute and self.candle_stick_5minute[-1].close_price >= purchase_price * 1.02:
-            return True
+        if not self.candle_stick_5minute:
+            return False
 
-        return False
+        return self.candle_stick_5minute[-1].close_price >= purchase_price * 1.02
     
     def is_sell_stop_loss_recommended(self, purchase_price):
         # 손절 추천 로직
-        timestamp = time.time()
+        local_time = time.localtime()
 
         # 장마감시간이 15:30이므로, 15:00 이후에는 어찌 되었든 판매 추천
-        if time.localtime(timestamp).tm_hour == 15 and time.localtime(timestamp).tm_min >= 0:
+        if local_time.tm_hour == 15 and local_time.tm_min >= 0:
             return True
         
         # -1% 손절 로직
-        if self.candle_stick_5minute and self.candle_stick_5minute[-1].close_price <= purchase_price * 0.99:
-            return True
+        if not self.candle_stick_5minute:
+            return False
 
-        return False
+        return self.candle_stick_5minute[-1].close_price <= purchase_price * 0.99
 
 class PriceAnalysis:
     def __init__(self, cache_file):

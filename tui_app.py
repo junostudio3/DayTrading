@@ -108,7 +108,7 @@ class DayTradingTUI(App):
         watch.cursor_type = "row"
 
         holdings.add_columns("종목", "이름", "수량", "매입가", "현재가", "손익률")
-        watch.add_columns("종목", "이름", "현재가", "매수", "매도", "손절")
+        watch.add_columns("종목", "이름", "현재가", "캔들수", "매수", "매도", "손절")
 
         self.engine.start()
         self.set_interval(1.0, self.refresh_dashboard)
@@ -168,6 +168,7 @@ class DayTradingTUI(App):
                 symbol,
                 row.get("name", symbol),
                 "-" if price is None else f"{price:,.0f}",
+                str(row.get("candles", 0)),
                 "Y" if row.get("buy", False) else "N",
                 "Y" if row.get("sell", False) else "N",
                 "Y" if row.get("stop", False) else "N",

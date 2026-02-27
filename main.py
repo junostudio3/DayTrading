@@ -45,6 +45,8 @@ class DayTradingBot:
 
         self.monitor_list = []
         self.buy_list = []
+        self.price_update_interval_sec = 2.5
+        self.last_price_update_at: dict[str, float] = {}
 
         # 관심 종목 정보 수집
         for name in kospi_wish_names:
@@ -97,8 +99,18 @@ class DayTradingBot:
             for stock in self.auth.account.stocks:
                 self.log(f"종목번호: {stock['pdno']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
-    def update_price(self, symbol: str):
+    def update_price(self, symbol: str, now: Optional[float] = None, force: bool = False):
         """단일 종목의 현재가 조회"""
+        if now is None:
+            now = time.time()
+
+        cached_item = self.price_analysis.items.get(symbol)
+        if not force:
+            last_update_at = self.last_price_update_at.get(symbol, 0.0)
+            if now - last_update_at < self.price_update_interval_sec:
+                if cached_item is not None and cached_item.candle_stick_5minute:
+                    return cached_item.candle_stick_5minute[-1].close_price
+
         error_count = 0
         while error_count < 5:
             try:
@@ -112,6 +124,8 @@ class DayTradingBot:
 
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
+
+        self.last_price_update_at[symbol] = now
 
         if self.price_analysis.add_price(symbol, price):
             # 가격이 업데이트된 경우에만 로그를 남기도록 변경
@@ -161,16 +175,18 @@ class DayTradingBot:
         state.buy_order_no = order_no
         state.step = TradeStep.CHECK_BUY
 
-    def _process_step_buy_check(self, symbol: str, _name: str):
+    def _process_step_buy_check(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         if not state.buy_order_no:
-            state.step = TradeStep.ORDER_SELL
+            state.step = TradeStep.ORDER_BUY
+            self.log(f"{symbol}] {name} 매수 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
             return
 
         if self.check_order_completed(symbol, state.buy_order_no, True):
             self.update_account_stock()
             state.buy_order_no = ""
             state.step = TradeStep.ORDER_SELL
+            self.log(f"[{symbol}] {name} 매수 주문이 체결되었습니다. 매도 주문 단계로 이동합니다.")
 
     def _process_order_sell(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
@@ -178,6 +194,7 @@ class DayTradingBot:
         if inventory is None:
             state.step = TradeStep.ORDER_BUY
             state.sell_order_no = ""
+            self.log(f"[{symbol}] {name} 매도를 준비하려 했으나 보유 수량이 없습니다. 매수 주문 단계로 이동합니다.")
             return
 
         purchase_price = float(inventory['pchs_avg_pric'])
@@ -185,10 +202,11 @@ class DayTradingBot:
 
         if self.price_analysis.is_sell_stop_loss_recommended(symbol, purchase_price):
             current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price if symbol in self.price_analysis.items and self.price_analysis.items[symbol].candle_stick_5minute else 0
-            self.log(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
             order = self.immediately_sell(symbol, quantity)
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.step = TradeStep.CHECK_SELL
+            self.log(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
+            self.log(f"즉시 매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: 시장가")
             return
 
         if not self.price_analysis.is_sell_recommended(symbol, purchase_price):
@@ -203,16 +221,18 @@ class DayTradingBot:
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.step = TradeStep.CHECK_SELL
 
-    def _process_step_sell_check(self, symbol: str, _name: str):
+    def _process_step_sell_check(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         if not state.sell_order_no:
             state.step = TradeStep.ORDER_BUY
+            self.log(f"[{symbol}] {name} 매도 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
             return
 
         if self.check_order_completed(symbol, state.sell_order_no, False):
             self.update_account_stock()
             state.sell_order_no = ""
             state.step = TradeStep.ORDER_BUY
+            self.log(f"[{symbol}] {name} 매도 주문이 체결되었습니다. 매수 주문 단계로 이동합니다.")
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:
@@ -247,16 +267,20 @@ class DayTradingBot:
         self.is_running = True
 
         # 종목별 상태머신 동작
+        processed_symbols = set()
         for stock in self.monitor_list:
             symbol = self._stock_symbol(stock)
             name = self._stock_name(stock)
             if not symbol:
                 continue
+            if symbol in processed_symbols:
+                continue
+            processed_symbols.add(symbol)
 
             state = self._get_trade_state(symbol)
 
             # 모든 step: 현재가 조회 및 분석(update_price)
-            self.update_price(symbol)
+            self.update_price(symbol, now)
             step = state.step
 
             if step == TradeStep.ORDER_BUY:
@@ -281,22 +305,26 @@ class DayTradingBot:
     def get_dashboard_snapshot(self):
         symbol_to_name = {}
         watch_symbols = []
+        watch_symbol_set = set()
         for item in self.monitor_list:
             symbol = self._stock_symbol(item)
             if not symbol:
                 continue
             symbol_to_name[symbol] = self._stock_name(item)
-            if symbol not in watch_symbols:
+            if symbol not in watch_symbol_set:
                 watch_symbols.append(symbol)
+                watch_symbol_set.add(symbol)
 
         watch_rows = []
         for symbol in watch_symbols:
             item = self.price_analysis.items.get(symbol)
             current_price = None
+            candle_count = 0
             buy_recommended = False
             sell_recommended = False
             stop_loss_recommended = False
             if item is not None and item.candle_stick_5minute:
+                candle_count = len(item.candle_stick_5minute)
                 current_price = item.candle_stick_5minute[-1].close_price
                 buy_recommended = self.price_analysis.is_purchase_recommended(symbol)
 
@@ -310,6 +338,7 @@ class DayTradingBot:
                 "symbol": symbol,
                 "name": symbol_to_name.get(symbol, symbol),
                 "price": current_price,
+                "candles": candle_count,
                 "buy": buy_recommended,
                 "sell": sell_recommended,
                 "stop": stop_loss_recommended,
@@ -360,7 +389,7 @@ class DayTradingBot:
         if symbol in self.price_analysis.items and self.price_analysis.items[symbol].candle_stick_5minute:
             price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
         else:
-            price = self.update_price(symbol)
+            price = self.update_price(symbol, force=True)
             if price is None:
                 raise RuntimeError("현재가를 가져오지 못해 주문할 수 없습니다.")
 
@@ -385,7 +414,7 @@ class DayTradingBot:
         if symbol in self.price_analysis.items and self.price_analysis.items[symbol].candle_stick_5minute:
             price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price
         else:
-            price = self.update_price(symbol)
+            price = self.update_price(symbol, force=True)
             if price is None:
                 raise RuntimeError("현재가를 가져오지 못해 주문할 수 없습니다.")
 
@@ -398,14 +427,20 @@ class DayTradingBot:
 
         # self.kosdq_monitor_list에 매도 리스트 업데이트
         self.monitor_list = []
+        monitor_symbols = set()
         # 먼저 매수 리스트에 있는 종목들을 모니터링 리스트에 추가
         for item in self.buy_list:
             self.monitor_list.append(item)
+            symbol = self._stock_symbol(item)
+            if symbol:
+                monitor_symbols.add(symbol)
 
         # 재고로 가지고 있는 건 모두 모니터링 리스트에 추가
         for stock in self.auth.account.stocks:
-            if stock['pdno'] not in [self._stock_symbol(item) for item in self.monitor_list]:
+            symbol = stock.get('pdno', '')
+            if symbol and symbol not in monitor_symbols:
                 self.monitor_list.append(stock)
+                monitor_symbols.add(symbol)
 
     def update_account_stock(self):
         while True:
