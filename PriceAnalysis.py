@@ -8,7 +8,6 @@ class PriceAnalysisItem:
     def __init__(self, symbol, name, cache_dir):
         self.symbol = symbol
         self.name = name
-        self.volume = 0
         self.candle_stick_5minute: list[Candlestick] = []
         # path to SQLite file for this symbol
         self.db_path = os.path.join(cache_dir, f"{symbol}.db")
@@ -55,8 +54,6 @@ class PriceAnalysisItem:
             candle.end_time = row[1]
             self.candle_stick_5minute.append(candle)
 
-        if self.candle_stick_5minute:
-            self.volume = int(self.candle_stick_5minute[-1].volume)
         conn.close()
 
     def _insert_candle(self, candle: Candlestick):
@@ -104,18 +101,16 @@ class PriceAnalysisItem:
             return time.time()
 
     def add_price(self, price, volume, stick_time: str) -> bool:
-        tick_volume = int(volume) if volume is not None else 0
         timestamp = self._timestamp_from_stick_time(stick_time)
         bucket = self._get_5min_bucket(timestamp)
 
         if not self.candle_stick_5minute:
             # 새로운 캔들스틱 생성
-            new_candle = Candlestick(price, price, price, price, tick_volume)
+            new_candle = Candlestick(price, price, price, price, volume)
             new_candle.start_time = bucket
             new_candle.end_time = bucket + 300
             self.candle_stick_5minute.append(new_candle)
             self._insert_candle(new_candle)
-            self.volume = int(new_candle.volume)
             return True
 
         last_candle = self.candle_stick_5minute[-1]
@@ -123,22 +118,21 @@ class PriceAnalysisItem:
         # 같은 5분 구간이면 업데이트
         if last_candle.start_time == bucket:
             changed = last_candle.close_price != price # 가격이 변경된 경우에만 True 반환
+
             last_candle.close_price = price
             last_candle.high_price = max(last_candle.high_price, price)
             last_candle.low_price = min(last_candle.low_price, price)
-            last_candle.volume = int(last_candle.volume) + tick_volume
+            last_candle.volume = volume
             self._insert_candle(last_candle)
-            self.volume = int(last_candle.volume)
             return changed
 
         # 새로운 5분 구간이면 새 봉 생성
         elif bucket > last_candle.start_time:
-            new_candle = Candlestick(price, price, price, price, tick_volume)
+            new_candle = Candlestick(price, price, price, price, volume)
             new_candle.start_time = bucket
             new_candle.end_time = bucket + 300
             self.candle_stick_5minute.append(new_candle)
             self._insert_candle(new_candle)
-            self.volume = int(new_candle.volume)
 
             # 메모리 관리
             if len(self.candle_stick_5minute) > 200:
