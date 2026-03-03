@@ -234,9 +234,14 @@ class PriceAnalysisItem:
         candles = self.candle_stick_5minute
         if len(candles) < 11:
             return False
-
-        recent_high = max(c.high_price for c in candles[-11:-1])
+        
         last_candle = candles[-1]
+        avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
+        recent_high = max(c.high_price for c in candles[-11:-1])
+
+        if last_candle.volume < avg_vol * 1.5:
+            # 거래량이 충분히 증가하지 않았다면 돌파로 보기 어렵다고 판단
+            return False
 
         if last_candle.close_price > recent_high:
             if last_candle.is_bullish():
