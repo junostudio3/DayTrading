@@ -122,7 +122,7 @@ class PriceAnalysisItem:
             last_candle.close_price = price
             last_candle.high_price = max(last_candle.high_price, price)
             last_candle.low_price = min(last_candle.low_price, price)
-            last_candle.volume = volume
+            last_candle.volume += volume
             self._insert_candle(last_candle)
             return changed
 
@@ -142,8 +142,8 @@ class PriceAnalysisItem:
         return False
         
     def is_purchase_recommended(self):
-        if self._is_purchase_trend_recommended():
-            return True
+        if not self._is_purchase_trend_recommended():
+            return False
         if self._is_pullback_buy():
             return True
         if self._is_breakout_buy():
@@ -151,71 +151,90 @@ class PriceAnalysisItem:
 
         return False
 
+    def _ema(self, prices, period):
+        if len(prices) < period:
+            return None
+
+        k = 2 / (period + 1)
+
+        # 초기 EMA는 단순 이동 평균으로 시작
+        ema = sum(prices[:period]) / period
+        
+        for price in prices[period:]:
+            ema = price * k + ema * (1 - k)
+        return ema
+
     # 구매 추세 조건    
     def _is_purchase_trend_recommended(self):
         # 구매 추세 추천 로직
 
         candles = self.candle_stick_5minute
-        candle_count = len(candles)
-        if candle_count < 60:
+        if len(candles) < 60:
             return False
 
-        # 5분봉이 5시간 이상 쌓였을 때 분석 시작
-        sum_60 = 0.0
-        sum_20 = 0.0
-        start_60 = candle_count - 60
-        start_20 = candle_count - 20
+        closes = [c.close_price for c in candles]
 
-        for idx in range(start_60, candle_count):
-            close_price = candles[idx].close_price
-            sum_60 += close_price
-            if idx >= start_20:
-                sum_20 += close_price
+        ema20 = self._ema(closes, 20)
+        ema60 = self._ema(closes, 60)
 
-        average_20 = sum_20 / 20
-        average_60 = sum_60 / 60
-        if average_20 < average_60:
+        if ema20 is None or ema60 is None:
+            return False
+    
+        # 이격도 최소 0.6%
+        if (ema20 - ema60) / ema60 < 0.006:
+            return False
+        
+        avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
+        if candles[-1].volume < avg_vol * 1.3:
+            # 거래량이 충분히 증가하지 않았다면 추세로 보기 어렵다고 판단
             return False
 
-        # 20이평 > 60이평 이면
-        last_close_price = candles[-1].close_price
-        prev_20 = (sum_20 - last_close_price + candles[candle_count - 21].close_price) / 20
-        if average_20 <= prev_20:
+        # 1️⃣ 20EMA > 60EMA
+        if ema20 <= ema60:
             return False
 
-        # 이평이 위로 뚫고 올라오는 모양이면
-        if last_close_price < average_20:
+        # 2️⃣ EMA 기울기 확인 (상승 중인지)
+        prev_ema20 = self._ema(closes[:-1], 20)
+        if prev_ema20 is None or ema20 <= prev_ema20:
             return False
 
-        # 현재가 > 20이평 이면
-        # 최근 3봉 중 2봉 이상 양봉이면
+        last_close = closes[-1]
+
+        # 3️⃣ 현재가가 20EMA 위에 있는지
+        if last_close < ema20:
+            return False
+
+        # 4️⃣ 최근 3봉 중 2봉 이상 양봉
         recent_candles = candles[-3:]
-        bullish_count = sum(1 for candle in recent_candles if candle.is_bullish())
+        bullish_count = sum(1 for c in recent_candles if c.is_bullish())
         if bullish_count < 2:
             return False
 
-        # 상승 추세라고 판단하여 구매 추천
         return True
     
     def _is_pullback_buy(self):
         # 눌림목 구매 추천 로직
-        # 20이평 > 60이평 이면서, 최근 5분봉이 20이평을 뚫고 올라오는 모양이면 구매 추천
         candles = self.candle_stick_5minute
         if len(candles) < 60:
             return False
 
         closes = [c.close_price for c in candles]
-        ma20 = sum(closes[-20:]) / 20
-        ma60 = sum(closes[-60:]) / 60
 
-        if ma20 <= ma60:
+        ema20 = self._ema(closes, 20)
+        ema60 = self._ema(closes, 60)
+
+        if ema20 is None or ema60 is None:
+            return False
+
+        # 추세 조건
+        if ema20 <= ema60:
             return False
 
         prev_close = closes[-2]
         last_close = closes[-1]
 
-        # 눌림 후 복귀
-        if prev_close < ma20 and last_close > ma20:
+        # 눌림 후 20EMA 재돌파
+        if prev_close < ema20 and last_close > ema20:
             if candles[-1].is_bullish():
                 return True
 
@@ -246,11 +265,46 @@ class PriceAnalysisItem:
     def is_sell_recommended(self, purchase_price):
         # 판매 추천 로직
         # 익절 로직
-        # 마지막 캔들스틱의 종가를 기준으로 purchase_price 대비 2% 이상 상승했을 때 판매 추천
-        if not self.candle_stick_5minute:
+        if len(self.candle_stick_5minute) < 3:
             return False
 
-        return self.candle_stick_5minute[-1].close_price >= purchase_price * 1.02
+        candles = self.candle_stick_5minute
+        last = candles[-1]
+        prev = candles[-2]
+
+        current_price = last.close_price
+        profit_rate = (current_price - purchase_price) / purchase_price
+
+        # 1.5% 이상 수익 구간이 아니면 판매 안함
+        if profit_rate < 0.015:
+            return False
+
+        if profit_rate >= 0.03:
+            # 3% 이상 수익이면 바로 판매 추천
+            return True
+
+        closes = [c.close_price for c in candles]
+        ema20 = self._ema(closes, 20)
+
+        # ----------------------------
+        # 🔼 상승 유지 조건
+        # ----------------------------
+
+        # 1️⃣ EMA20 위에 있고
+        ema_condition = ema20 is not None and current_price >= ema20
+
+        # 2️⃣ 최근 봉이 양봉이고
+        bullish_condition = last.is_bullish()
+
+        # 3️⃣ 고점이 낮아지지 않았으면 (higher high)
+        high_condition = last.high_price >= prev.high_price
+
+        # 상승 유지면 안 판다
+        if ema_condition and bullish_condition and high_condition:
+            return False
+
+        # 상승 꺾이면 매도
+        return True
     
     def is_sell_stop_loss_recommended(self, purchase_price):
         # 손절 추천 로직
@@ -261,11 +315,11 @@ class PriceAnalysisItem:
             (local_time.tm_hour == 15 and local_time.tm_min >= 30):
             return True
         
-        # -1% 손절 로직
+        # -0.6% 손절 로직
         if not self.candle_stick_5minute:
             return False
 
-        return self.candle_stick_5minute[-1].close_price <= purchase_price * 0.99
+        return self.candle_stick_5minute[-1].close_price <= purchase_price * 0.994
 
 class PriceAnalysis:
     def __init__(self, cache_file):
