@@ -1,11 +1,12 @@
 class Candlestick:
-    def __init__(self, open_price, high_price, low_price, close_price):
+    def __init__(self, open_price, high_price, low_price, close_price, volume=0):
         self.start_time = None  # 캔들스틱의 시작 시간
         self.end_time = None    # 캔들스틱의 종료 시간
         self.open_price = open_price
         self.high_price = high_price
         self.low_price = low_price
         self.close_price = close_price
+        self.volume = volume
 
     def is_bullish(self):
         return self.close_price > self.open_price

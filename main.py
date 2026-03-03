@@ -98,9 +98,9 @@ class DayTradingBot:
             self.log("보유 주식이 없습니다.")
         else:
             for stock in self.auth.account.stocks:
-                self.log(f"종목번호: {stock['pdno']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
+                self.log(f"종목번호: {stock['pdno']} {self._stock_name(stock)}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
-    def update_price(self, symbol: str, now: Optional[float] = None, force: bool = False):
+    def update_price(self, symbol: str, now: Optional[float] = None, force: bool = False, name: Optional[str] = None) -> Optional[float]:
         """단일 종목의 현재가 조회"""
         if now is None:
             now = time.time()
@@ -115,7 +115,21 @@ class DayTradingBot:
         error_count = 0
         while error_count < 5:
             try:
-                price = self.auth.price.get_current(symbol)
+                current_time = time.localtime(now)
+                hour = current_time.tm_hour
+                minute = current_time.tm_min
+                candle = self.auth.price.get_one_minute_candlestick(symbol, hour, minute)
+                price = None
+                volume = None
+                stick_time = None
+                # candle 데이터중 첫번째 (가장 최근 데이터)의 현재가와 체결량을 가져온다.)
+                if candle and len(candle) > 0 and "stck_prpr" in candle[0] and "cntg_vol" in candle[0] and "stck_cntg_hour" in candle[0]:
+                    price = float(candle[0]["stck_prpr"])
+                    volume = int(candle[0]["cntg_vol"])
+                    stick_time = candle[0]["stck_cntg_hour"]
+                else:
+                    raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
+
                 break
             except Exception as e:
                 error_count += 1
@@ -128,9 +142,13 @@ class DayTradingBot:
 
         self.last_price_update_at[symbol] = now
 
-        if self.price_analysis.add_price(symbol, price):
-            # 가격이 업데이트된 경우에만 로그를 남기도록 변경
-            print(f"관심 종목: [{symbol}] / 현재가: {price}") # 로그에 남기기에는 너무 많으므로 콘솔에 출력하도록 변경
+        if self.price_analysis.add_price(symbol, price, volume, stick_time):
+            # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
+
+            if name is None:
+                print(f"관심 종목: [{symbol}] / 현재가: {price} / 체결: {volume}")
+            else:
+                print(f"관심 종목: [{symbol}] {name} / 현재가: {price} / 체결: {volume}")
         return price
 
     def _stock_symbol(self, stock: Any) -> str:
@@ -305,7 +323,7 @@ class DayTradingBot:
             state = self._get_trade_state(symbol)
 
             # 모든 step: 현재가 조회 및 분석(update_price)
-            self.update_price(symbol, now)
+            self.update_price(symbol, now, name=name)
             step = state.step
 
             if step == TradeStep.ORDER_BUY:
@@ -490,6 +508,7 @@ class DayTradingBot:
         while True:
             try:
                 check_list = self.auth.order.order_check(pd_no, order_no, is_buy)
+
                 for check in check_list:
                     if check.get("rmn_qty", "0") != "0":
                         # 잔여수량 0이 아니면 체결 안된 것으로 간주

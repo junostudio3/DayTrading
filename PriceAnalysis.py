@@ -1,12 +1,14 @@
 import os
 import time
 import sqlite3
+from datetime import datetime
 from Candlestick import Candlestick
 
 class PriceAnalysisItem:
     def __init__(self, symbol, name, cache_dir):
         self.symbol = symbol
         self.name = name
+        self.volume = 0
         self.candle_stick_5minute: list[Candlestick] = []
         # path to SQLite file for this symbol
         self.db_path = os.path.join(cache_dir, f"{symbol}.db")
@@ -24,9 +26,16 @@ class PriceAnalysisItem:
                 open_price REAL,
                 high_price REAL,
                 low_price REAL,
-                close_price REAL
+                close_price REAL,
+                volume INTEGER DEFAULT 0
             )"""
         )
+
+        c.execute("PRAGMA table_info(candles)")
+        columns = [row[1] for row in c.fetchall()]
+        if "volume" not in columns:
+            c.execute("ALTER TABLE candles ADD COLUMN volume INTEGER DEFAULT 0")
+
         conn.commit()
         conn.close()
 
@@ -38,21 +47,24 @@ class PriceAnalysisItem:
         conn = self._db_connect()
         c = conn.cursor()
         for row in c.execute(
-            "SELECT start_time, end_time, open_price, high_price, low_price, close_price "
+            "SELECT start_time, end_time, open_price, high_price, low_price, close_price, volume "
             "FROM candles ORDER BY start_time"
         ):
-            candle = Candlestick(row[2], row[3], row[4], row[5])
+            candle = Candlestick(row[2], row[3], row[4], row[5], row[6] if row[6] is not None else 0)
             candle.start_time = row[0]
             candle.end_time = row[1]
             self.candle_stick_5minute.append(candle)
+
+        if self.candle_stick_5minute:
+            self.volume = int(self.candle_stick_5minute[-1].volume)
         conn.close()
 
     def _insert_candle(self, candle: Candlestick):
         conn = self._db_connect()
         c = conn.cursor()
         c.execute(
-            "INSERT OR REPLACE INTO candles(start_time, end_time, open_price, high_price, low_price, close_price) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO candles(start_time, end_time, open_price, high_price, low_price, close_price, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 candle.start_time,
                 candle.end_time,
@@ -60,6 +72,7 @@ class PriceAnalysisItem:
                 candle.high_price,
                 candle.low_price,
                 candle.close_price,
+                int(candle.volume),
             ),
         )
         conn.commit()
@@ -75,17 +88,34 @@ class PriceAnalysisItem:
     def _get_5min_bucket(self, ts: float):
         return ts - (ts % 300)
 
-    def add_price(self, price) -> bool:
-        timestamp = time.time()
+    def _timestamp_from_stick_time(self, stick_time: str) -> float:
+        if not stick_time:
+            return time.time()
+
+        try:
+            hhmmss = stick_time.strip()[:6]
+            hour = int(hhmmss[0:2])
+            minute = int(hhmmss[2:4])
+            second = int(hhmmss[4:6])
+            now = datetime.now()
+            tick_dt = now.replace(hour=hour, minute=minute, second=second, microsecond=0)
+            return tick_dt.timestamp()
+        except Exception:
+            return time.time()
+
+    def add_price(self, price, volume, stick_time: str) -> bool:
+        tick_volume = int(volume) if volume is not None else 0
+        timestamp = self._timestamp_from_stick_time(stick_time)
         bucket = self._get_5min_bucket(timestamp)
 
         if not self.candle_stick_5minute:
             # 새로운 캔들스틱 생성
-            new_candle = Candlestick(price, price, price, price)
-            new_candle.start_time = timestamp
-            new_candle.end_time = timestamp
+            new_candle = Candlestick(price, price, price, price, tick_volume)
+            new_candle.start_time = bucket
+            new_candle.end_time = bucket + 300
             self.candle_stick_5minute.append(new_candle)
             self._insert_candle(new_candle)
+            self.volume = int(new_candle.volume)
             return True
 
         last_candle = self.candle_stick_5minute[-1]
@@ -96,23 +126,26 @@ class PriceAnalysisItem:
             last_candle.close_price = price
             last_candle.high_price = max(last_candle.high_price, price)
             last_candle.low_price = min(last_candle.low_price, price)
+            last_candle.volume = int(last_candle.volume) + tick_volume
             self._insert_candle(last_candle)
+            self.volume = int(last_candle.volume)
             return changed
 
         # 새로운 5분 구간이면 새 봉 생성
         elif bucket > last_candle.start_time:
-            new_candle = Candlestick(price, price, price, price)
+            new_candle = Candlestick(price, price, price, price, tick_volume)
             new_candle.start_time = bucket
             new_candle.end_time = bucket + 300
             self.candle_stick_5minute.append(new_candle)
             self._insert_candle(new_candle)
+            self.volume = int(new_candle.volume)
 
             # 메모리 관리
             if len(self.candle_stick_5minute) > 200:
                 oldest = self.candle_stick_5minute.pop(0)
                 self._delete_candle(oldest.start_time)
-            
             return True
+        return False
         
     def is_purchase_recommended(self):
         if self._is_purchase_trend_recommended():
@@ -199,7 +232,7 @@ class PriceAnalysisItem:
         # 최근 5분봉이 최근 1시간 내 고점(20이평 이상)을 뚫고 올라오는 모양이면 구매 추천
 
         candles = self.candle_stick_5minute
-        if len(candles) < 15:
+        if len(candles) < 11:
             return False
 
         recent_high = max(c.high_price for c in candles[-11:-1])
@@ -225,7 +258,8 @@ class PriceAnalysisItem:
         local_time = time.localtime()
 
         # 장마감시간이 15:30이므로, 15:00 이후에는 어찌 되었든 판매 추천
-        if local_time.tm_hour == 15 and local_time.tm_min >= 0:
+        if (local_time.tm_hour > 15) or \
+            (local_time.tm_hour == 15 and local_time.tm_min >= 30):
             return True
         
         # -1% 손절 로직
@@ -258,12 +292,12 @@ class PriceAnalysis:
             item = PriceAnalysisItem(symbol, symbol, self.cache_dir)
             self.items[symbol] = item
 
-    def add_price(self, symbol, price) -> bool:
+    def add_price(self, symbol, price, volume, stick_time: str) -> bool:
         is_changed = False
         if symbol not in self.items:
             self.items[symbol] = PriceAnalysisItem(symbol, symbol, self.cache_dir)  # 이름은 심볼로 초기화
             is_changed = True
-        if self.items[symbol].add_price(price):
+        if self.items[symbol].add_price(price, volume, stick_time):
             is_changed = True
         return is_changed
 

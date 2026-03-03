@@ -57,7 +57,7 @@ class KisAuthOrder:
             if data.get("rt_cd") == "0" and "output1" in data:
                 return data["output1"]
 
-        return None
+        raise Exception(f"Failed to check order: {response.status_code} {response.text}")
 
     # 매수/매도 주문 관련
     def order_cash(self, symbol: str, quantity: int, price: int, is_buy: bool, division: OrderDivision):
@@ -66,8 +66,12 @@ class KisAuthOrder:
         if self.auth.is_virtual and division == OrderDivision.MARKET:
             # 모의 투자에서는 시장가 주문이 지원되지 않으므로, 지정가 주문으로 대체한다.
             # 시장가 주문 대신 현재가로 지정가 주문을 한다.
-            price = int(self.auth.price.get_current(symbol))
-            division = OrderDivision.SETTLE
+            candle = self.auth.price.get_one_minute_candlestick(symbol, datetime.datetime.now().hour, datetime.datetime.now().minute)
+            if candle and len(candle) > 0 and "stck_prpr" in candle[0]:
+                price = int(candle[0]["stck_prpr"])
+                division = OrderDivision.SETTLE
+            else:
+                raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
 
         params = {
             "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
