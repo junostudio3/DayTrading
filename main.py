@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 
 class TradeStep(Enum):
+    JUDGE_STEP = auto()
     ORDER_BUY = auto()
     CHECK_BUY = auto()
     ORDER_SELL = auto()
@@ -22,7 +23,7 @@ class TradeStep(Enum):
 
 @dataclass
 class TradeState:
-    step: TradeStep = TradeStep.ORDER_BUY
+    step: TradeStep = TradeStep.JUDGE_STEP
     buy_order_no: str = ""
     sell_order_no: str = ""
 
@@ -76,12 +77,6 @@ class DayTradingBot:
         self.is_running = True
         self.symbol_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
-
-        # 초기에 관심 종목 주식을 가지고 있다면 step을 3으로 시작한다.
-        for symbol in self.auth.account.stocks_by_symbol.keys():
-            if symbol in [self._stock_symbol(item) for item in self.buy_list]:
-                state = self._get_trade_state(symbol)
-                state.step = TradeStep.ORDER_SELL
 
     def run(self):
         self.display_account_info()
@@ -169,10 +164,29 @@ class DayTradingBot:
             self.symbol_states[symbol] = TradeState()
         return self.symbol_states[symbol]
 
+    def _process_step_judge(self, symbol: str, name: str):
+        self.update_sell_list()
+        state = self._get_trade_state(symbol)
+
+        # self.auth.account.stocks 내에 현재 심볼이 존재하는지 확인하여 매도 주문 단계로 이동
+        if self._find_inventory(symbol) is not None:
+            state.step = TradeStep.ORDER_SELL
+            self.log(f"[{symbol}] {name} 보유 수량이 확인되어 매도 주문 단계로 이동합니다.")
+            return
+        else:
+            # 보유 수량이 없는 경우 매수 주문 단계로 이동
+            state.step = TradeStep.ORDER_BUY
+            self.log(f"[{symbol}] {name} 보유 수량이 없어서 매수 주문 단계로 이동합니다.")
+            return
+
     def _process_step_order_buy(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         inventory = self._find_inventory(symbol)
         if inventory is not None:
+            # 이상하다 보유 수량이 있는데 매수 주문 단계에 있다.
+            # 다시 판단 단계로 이동한다.
+            state.step = TradeStep.JUDGE_STEP
+            self.log(f"[{symbol}] {name} 보유 수량이 확인되었으나 매수 주문 단계에 있어 판단 단계로 이동합니다.")
             return
 
         if self.price_analysis.is_purchase_recommended(symbol) is False:
@@ -294,6 +308,11 @@ class DayTradingBot:
         return True
 
     def process_once(self):
+        '''
+        장 시작 여부 확인
+         - 장이 시작되지 않았으면, 장이 시작될 때까지 대기한다.
+         - 장이 시작되면, _process_step 함수를 호출하여 매매 로직을 실행한다.
+        '''
         now = time.time()
 
         if not self.is_market_open(now):
@@ -308,7 +327,9 @@ class DayTradingBot:
             return
 
         self.is_running = True
+        self._process_step(now)
 
+    def _process_step(self, now: float):
         # 종목별 상태머신 동작
         processed_symbols = set()
         for stock in self.monitor_list:
@@ -326,7 +347,10 @@ class DayTradingBot:
             self.update_price(symbol, now, name=name)
             step = state.step
 
-            if step == TradeStep.ORDER_BUY:
+            if step == TradeStep.JUDGE_STEP:
+                # step0: 스탭판단
+                self._process_step_judge(symbol, name)
+            elif step == TradeStep.ORDER_BUY:
                 # step1: 매수 가능 확인 (매수 주문 후 step2)
                 self._process_step_order_buy(symbol, name)
             elif step == TradeStep.CHECK_BUY:

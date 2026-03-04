@@ -58,6 +58,40 @@ class KisAuthOrder:
                 return data["output1"]
 
         raise Exception(f"Failed to check order: {response.status_code} {response.text}")
+    
+    # 주문 취소
+    def cancel_order(self, order_no: str, is_buy: bool):
+        """주문 취소"""
+
+        tr_id = "VTTC0013U" if self.auth.is_virtual else "TTTC0013U"
+
+        response = self.auth.request_post(
+            url="/uapi/domestic-stock/v1/trading/order-rvsecncl",
+            tr_id=tr_id,  # 주문 취소 트랜잭션 ID
+            headers={
+                "content-type": "application/json; charset=utf-8",
+            },
+            params={
+                "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
+                "ACNT_PRDT_CD": "01",  # 계좌번호 체계(8-2)의 뒤 2자리
+                "KRX_FWDG_ORD_ORGNO": order_no,  # 한국거래소 주문번호 (주문 시 반환되는 주문번호)
+                "ORGN_ODNO": order_no,  # 주문번호
+                "ORD_DVSN": "00", # 주문구분 00: 지정가 이나 정정이 아니라 취소할 것이므로 의미 없음
+                "RVSE_CNCL_DVSN_CD" : "02", # 정정취소구분코드 01: 정정, 02: 취소
+                "ORD_QTY": "0", # 주문수량 (전부 취소할것이므로 의미 없음)
+                "ORD_UNPR": "0", # 주문가격 (전부 취소할것이므로 의미 없음)
+                "QTY_ALL_ORD_YN": "Y", # 잔량전부주문여부 (Y: 전량, N: 일부)
+            }
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("rt_cd") == "0":
+                return True
+            else:
+                raise Exception(f"Failed to cancel order: {data.get('msg_cd')} {data.get('msg1')}")
+        else:
+            raise Exception(f"Failed to cancel order: {response.status_code} {response.text}")
 
     # 매수/매도 주문 관련
     def order_cash(self, symbol: str, quantity: int, price: int, is_buy: bool, division: OrderDivision):
