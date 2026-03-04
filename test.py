@@ -1,4 +1,4 @@
-from main import DayTradingBot
+from DayTradingBot import DayTradingBot
 
 def test_day_trading_bot():
     # DayTradingBot 인스턴스 생성

@@ -1,4 +1,4 @@
-from main import DayTradingBot
+from DayTradingBot import DayTradingBot
 from trading_engine import TradingEngine
 from tui_app import DayTradingTUI
 
