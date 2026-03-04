@@ -33,54 +33,23 @@ class DayTradingBot:
     ORDER_TIMEOUT_SECONDS = 60 * 5
 
     def __init__(self, log_callback=None):
-        # logger callback used for emitting messages; defaults to built-in print
-        # TradingEngine will override this after construction so that all
-        # bot-generated messages get forwarded to engine._append_log.
-        self.log = log_callback or print
-
-        kosdq_records = load_kosdaq_master()
-        kospi_records = load_kospi_master()
-
-        # 관심 종목을 리스트로 수집
-        kospi_wish_names = []
-        kospi_wish_names += ["대한항공"]
-
-        kosdq_wish_names = []
-        kosdq_wish_names += ["인텍플러스", "고영", "펨트론"]
-
-        self.monitor_list = []
-        self.buy_list = []
-        self.price_update_interval_sec = 2.5
-        self.last_price_update_at: dict[str, float] = {}
-
-        # 관심 종목 정보 수집
-        for name in kospi_wish_names:
-            results = find_kospi_by_name(name, kospi_records)
-            if results is None or len(results) == 0:
-                self.log(f"{name} 종목을 찾을 수 없습니다.")
-                exit(1)
-            else:
-                self.buy_list.append(results[0])
-                self.monitor_list.append(results[0])
-
-        for name in kosdq_wish_names:
-            results = find_kosdaq_by_name(name, kosdq_records)
-            if results is None or len(results) == 0:
-                self.log(f"{name} 종목을 찾을 수 없습니다.")
-                exit(1)
-            else:
-                self.buy_list.append(results[0])
-                self.monitor_list.append(results[0])
-
         self.auth = KisAuth(app_key, app_secret, app_account, app_is_virtual, app_domain)
         self.auth.account.update()
-        self.update_sell_list()
 
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.loop_count = 0
         self.is_running = True
         self.symbol_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
+        self.monitor_list = []
+        self.buy_list = []
+        self.price_update_interval_sec = 2.5
+        self.last_price_update_at: dict[str, float] = {}
+
+        # logger를 외부에서 받지 못했으면 print로 로그를 남기도록 한다.
+        self.log = log_callback or print
+        self.current_intrest_stock_date = None
+        self.update_sell_list()
 
     def run(self):
         self.display_account_info()
@@ -167,6 +136,46 @@ class DayTradingBot:
         if symbol not in self.symbol_states:
             self.symbol_states[symbol] = TradeState()
         return self.symbol_states[symbol]
+    
+    def _collect_interest_stocks(self, now: float):
+        now_date = time.strftime("%Y-%m-%d", time.localtime(now))
+        if self.current_intrest_stock_date == now_date:
+            # 이미 관심 종목을 수집한 경우에는 다시 수집하지 않는다.
+            return
+
+        kosdq_records = load_kosdaq_master()
+        kospi_records = load_kospi_master()
+
+        # 관심 종목을 리스트로 수집
+        kospi_wish_names = []
+        kospi_wish_names += ["대한항공"]
+
+        kosdq_wish_names = []
+        kosdq_wish_names += ["인텍플러스", "고영", "펨트론"]
+
+        # 관심 종목 정보 수집
+        for name in kospi_wish_names:
+            results = find_kospi_by_name(name, kospi_records)
+            if results is None or len(results) == 0:
+                self.log(f"{name} 종목을 찾을 수 없습니다.")
+                exit(1)
+            else:
+                self.buy_list.append(results[0])
+                self.monitor_list.append(results[0])
+
+        for name in kosdq_wish_names:
+            results = find_kosdaq_by_name(name, kosdq_records)
+            if results is None or len(results) == 0:
+                self.log(f"{name} 종목을 찾을 수 없습니다.")
+                exit(1)
+            else:
+                self.buy_list.append(results[0])
+                self.monitor_list.append(results[0])
+
+        self.current_intrest_stock_date = now_date
+
+        # 관심 종목은 매수 할 수 있으므로 매도 리스트에도 추가한다.
+        self.update_sell_list()
 
     def _process_step_judge(self, symbol: str, name: str):
         self.update_sell_list()
@@ -256,7 +265,7 @@ class DayTradingBot:
                 state.buy_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
-                self.log(f"[{symbol}] {name} 매수 주문 취소 실패: {e}")
+                self.log(f"[{symbol}] {name} 매수 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
 
         if self.check_order_completed(symbol, state.buy_order_no, True):
@@ -321,7 +330,7 @@ class DayTradingBot:
                 state.sell_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
-                self.log(f"[{symbol}] {name} 매도 주문 취소 실패: {e}")
+                self.log(f"[{symbol}] {name} 매도 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
 
         if self.check_order_completed(symbol, state.sell_order_no, False):
@@ -354,6 +363,8 @@ class DayTradingBot:
          - 장이 시작되면, _process_step 함수를 호출하여 매매 로직을 실행한다.
         '''
         now = time.time()
+
+        self._collect_interest_stocks(now)
 
         if not self.is_market_open(now):
             if self.is_running:
