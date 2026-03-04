@@ -60,7 +60,7 @@ class KisAuthOrder:
         raise Exception(f"Failed to check order: {response.status_code} {response.text}")
     
     # 주문 취소
-    def cancel_order(self, order_no: str, is_buy: bool):
+    def cancel_order(self, order_no: str):
         """주문 취소"""
 
         tr_id = "VTTC0013U" if self.auth.is_virtual else "TTTC0013U"

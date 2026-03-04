@@ -26,8 +26,12 @@ class TradeState:
     step: TradeStep = TradeStep.JUDGE_STEP
     buy_order_no: str = ""
     sell_order_no: str = ""
+    buy_order_requested_at: float = 0.0
+    sell_order_requested_at: float = 0.0
 
 class DayTradingBot:
+    ORDER_TIMEOUT_SECONDS = 60 * 5
+
     def __init__(self, log_callback=None):
         # logger callback used for emitting messages; defaults to built-in print
         # TradingEngine will override this after construction so that all
@@ -230,18 +234,35 @@ class DayTradingBot:
 
         self.log(f"매수 주문: [{symbol}] {name} / 수량: {order_quantity} / 가격: {current_price}")
         state.buy_order_no = order_no
+        state.buy_order_requested_at = time.time()
         state.step = TradeStep.CHECK_BUY
 
     def _process_step_buy_check(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         if not state.buy_order_no:
+            state.buy_order_requested_at = 0.0
             state.step = TradeStep.ORDER_BUY
             self.log(f"{symbol}] {name} 매수 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
+            return
+
+        if (
+            state.buy_order_requested_at > 0
+            and (time.time() - state.buy_order_requested_at) > self.ORDER_TIMEOUT_SECONDS
+        ):
+            try:
+                self.auth.order.cancel_order(state.buy_order_no)
+                self.log(f"[{symbol}] {name} 매수 주문 체결 대기가 5분을 초과해 주문을 취소합니다.")
+                state.buy_order_no = ""
+                state.buy_order_requested_at = 0.0
+                state.step = TradeStep.JUDGE_STEP
+            except Exception as e:
+                self.log(f"[{symbol}] {name} 매수 주문 취소 실패: {e}")
             return
 
         if self.check_order_completed(symbol, state.buy_order_no, True):
             self.update_account_stock()
             state.buy_order_no = ""
+            state.buy_order_requested_at = 0.0
             state.step = TradeStep.ORDER_SELL
             self.log(f"[{symbol}] {name} 매수 주문이 체결되었습니다. 매도 주문 단계로 이동합니다.")
 
@@ -251,6 +272,7 @@ class DayTradingBot:
         if inventory is None:
             state.step = TradeStep.ORDER_BUY
             state.sell_order_no = ""
+            state.sell_order_requested_at = 0.0
             self.log(f"[{symbol}] {name} 매도를 준비하려 했으나 보유 수량이 없습니다. 매수 주문 단계로 이동합니다.")
             return
 
@@ -261,6 +283,7 @@ class DayTradingBot:
             current_price = self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price if symbol in self.price_analysis.items and self.price_analysis.items[symbol].candle_stick_5minute else 0
             order = self.immediately_sell(symbol, quantity)
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
+            state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
             state.step = TradeStep.CHECK_SELL
             self.log(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
             self.log(f"즉시 매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: 시장가")
@@ -276,18 +299,35 @@ class DayTradingBot:
         order = self.sell(symbol, quantity, current_price)
         self.log(f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
+        state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
         state.step = TradeStep.CHECK_SELL
 
     def _process_step_sell_check(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         if not state.sell_order_no:
+            state.sell_order_requested_at = 0.0
             state.step = TradeStep.ORDER_BUY
             self.log(f"[{symbol}] {name} 매도 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
+            return
+
+        if (
+            state.sell_order_requested_at > 0
+            and (time.time() - state.sell_order_requested_at) > self.ORDER_TIMEOUT_SECONDS
+        ):
+            try:
+                self.auth.order.cancel_order(state.sell_order_no)
+                self.log(f"[{symbol}] {name} 매도 주문 체결 대기가 5분을 초과해 주문을 취소합니다.")
+                state.sell_order_no = ""
+                state.sell_order_requested_at = 0.0
+                state.step = TradeStep.JUDGE_STEP
+            except Exception as e:
+                self.log(f"[{symbol}] {name} 매도 주문 취소 실패: {e}")
             return
 
         if self.check_order_completed(symbol, state.sell_order_no, False):
             self.update_account_stock()
             state.sell_order_no = ""
+            state.sell_order_requested_at = 0.0
             state.step = TradeStep.ORDER_BUY
             self.log(f"[{symbol}] {name} 매도 주문이 체결되었습니다. 매수 주문 단계로 이동합니다.")
 
