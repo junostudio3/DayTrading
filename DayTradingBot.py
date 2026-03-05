@@ -147,6 +147,7 @@ class DayTradingBot:
         # 한 번 호출 시 하나씩 조회 (인덱스 유지)
         if explore_index >= len(self.all_records):
             explore_index = 0
+            self.interest_stock_manager.enable_keep_7days()
 
         record = self.all_records[explore_index]
         symbol = self._stock_symbol(record)
@@ -270,6 +271,7 @@ class DayTradingBot:
 
         if self.check_order_completed(symbol, state.buy_order_no, True):
             self.update_account_stock()
+            self.interest_stock_manager.update_trade_date(symbol)
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
             state.step = TradeStep.DECIDE_ON_SELL
@@ -335,6 +337,7 @@ class DayTradingBot:
 
         if self.check_order_completed(symbol, state.sell_order_no, False):
             self.update_account_stock()
+            self.interest_stock_manager.update_trade_date(symbol)
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
             state.step = TradeStep.DECIDE_ON_PURCHASE
@@ -482,6 +485,8 @@ class DayTradingBot:
         return {
             "market_open": self.is_market_open(),
             "loop_count": self.loop_count,
+            "explore_index": self.interest_stock_manager.get_explore_index(),
+            "max_count": len(self.all_records),
             "account": {
                 "cash": self.auth.account.dnca_tot_amt,
                 "d1": self.auth.account.nxdy_excc_amt,
@@ -507,6 +512,7 @@ class DayTradingBot:
 
         result = self.buy(symbol, quantity, price)
         self.update_account_stock()
+        self.interest_stock_manager.update_trade_date(symbol)
         return result
 
     def place_manual_sell(self, symbol: str, quantity: int):
@@ -532,6 +538,7 @@ class DayTradingBot:
 
         result = self.sell(symbol, quantity, price)
         self.update_account_stock()
+        self.interest_stock_manager.update_trade_date(symbol)
         return result
 
     def update_sell_list(self):

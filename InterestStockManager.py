@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from typing import List, Dict, Any
 
 class InterestStockManager:
@@ -7,6 +8,7 @@ class InterestStockManager:
         self.cache_file_path = cache_file_path
         self.buy_list: List[Dict[str, Any]] = []
         self.explore_index: int = 0
+        self.keep_7days: bool = False
         self.load()
 
     def load(self):
@@ -17,13 +19,17 @@ class InterestStockManager:
                     if isinstance(data, dict):
                         self.buy_list = data.get("buy_list", [])
                         self.explore_index = data.get("explore_index", 0)
+                        self.keep_7days = data.get("keep_7days", False)
                     elif isinstance(data, list):
+                        # 이전 버전 호환: 리스트 형태로 저장된 경우 buy_list로 간주
                         self.buy_list = data
                         self.explore_index = 0
+                        self.keep_7days = False
             except Exception as e:
                 print(f"Failed to load interest stocks from {self.cache_file_path}: {e}")
                 self.buy_list = []
                 self.explore_index = 0
+                self.available_delete = False
 
     def save(self):
         os.makedirs(os.path.dirname(self.cache_file_path), exist_ok=True)
@@ -45,50 +51,65 @@ class InterestStockManager:
     def update_stock(self, symbol: str, name: str, price: float, volume: int) -> bool:
         existing = next((item for item in self.buy_list if item["record"].get("pdno") == symbol), None)
 
-        if price <= 0:
-            # 가격이 0이하인 경우는 관심 종목에서 제거한다.
+        if price <= 0 or price > 20000:
             if existing:
                 self.buy_list.remove(existing)
                 self.save()
-                return True  # 종목이 제거되었으므로 리스트가 변경되었다고 간주한다.
-            return False  # 종목이 존재하지 않으므로 리스트 변경이 없다.
-
-        if price > 20000:
-            # 가격이 너무 높으면 단타가 어려울 수 있으므로 관심 종목에서 제거한다.
-            if existing:
-                self.buy_list.remove(existing)
-                self.save()
-                return True  # 종목이 제거되었으므로 리스트가 변경되었다고 간주한다.
-            return False  # 종목이 존재하지 않으므로 리스트 변경이 없다.
+                return True
+            return False
 
         if existing:
             existing["price"] = price
             existing["volume"] = volume
+            if "added_at" not in existing:
+                existing["added_at"] = time.time()
             self.buy_list.sort(key=lambda x: x["volume"], reverse=True)
             self.save()
-            return False  # 기존 종목의 가격/거래량 업데이트는 리스트 변경으로 간주하지 않는다.
+            return False
 
-        # self.buy_list는 최대 10개까지만 유지한다
+        # self.buy_list는 기본적으로 Top 10을 유지한다 (보호 항목 제외)
         if len(self.buy_list) >= 10:
-            # volume이 가장 작은 종목과 비교해서 새 종목이 더 거래량이 많으면 교체한다
-            if volume < self.buy_list[-1]["volume"]:
-                return False  # 새 종목이 거래량이 더 적으면 추가하지 않는다
+            candidates = None
+            if self.keep_7days:
+                now = time.time()
+                seven_days = 7 * 24 * 60 * 60
+                candidates = [item for item in self.buy_list if (now - item.get("added_at", now)) > seven_days]
             
-            self.buy_list.pop()  # 거래량이 가장 작은 종목 제거
+            if candidates:
+                # 일주일 이상된 항목이 있다면 그 중 가장 낮은 거래량을 가진 항목을 찾아서 제거한다
+                lowest_volume_item = min(candidates, key=lambda x: x["volume"])
+                self.buy_list.remove(lowest_volume_item)
+            else:
+                # volume이 10번째 종목보다 작으면 탑 10에 들 수 없으므로 무시
+                self.buy_list.sort(key=lambda x: x["volume"], reverse=True)
+                if volume <= self.buy_list[9]["volume"]:
+                    return False
 
+        # 조건을 만족하여 탑 10에 진입하는 새 종목
         self.buy_list.append({
             "record": {
                 "pdno": symbol,
                 "prdt_name": name,
             },
             "price": price,
-            "volume": volume
+            "volume": volume,
+            "added_at": time.time()
         })
 
         self.buy_list.sort(key=lambda x: x["volume"], reverse=True)
         self.save()
 
-        return True  # 새로운 종목이 추가되었으므로 리스트가 변경되었다고 간주한다.
+        return True
+
+    def update_trade_date(self, symbol: str):
+        existing = next((item for item in self.buy_list if item["record"].get("pdno") == symbol), None)
+        if existing:
+            existing["added_at"] = time.time()
+            self.save()
+
+    def enable_keep_7days(self):
+        self.keep_7days = True
+        self.save()
 
     def get_buy_list(self) -> List[Dict[str, Any]]:
         return self.buy_list
