@@ -46,6 +46,9 @@ class DayTradingBot:
         self.log = log_callback or print
         self.update_sell_list()
 
+        from TradeReporter import TradeReporter
+        self.trade_reporter = TradeReporter(self)
+
     def run(self):
         self.display_account_info()
         while True:
@@ -242,7 +245,7 @@ class DayTradingBot:
 
         order_no = order.get("ODNO", "")
 
-        self.log(f"매수 주문: [{symbol}] {name} / 수량: {order_quantity} / 가격: {current_price}")
+        self.trade_reporter.add_buy_order(symbol, name, order_quantity, current_price)  
         state.buy_order_no = order_no
         state.buy_order_requested_at = time.time()
         state.step = TradeStep.WAIT_ACCEPT_PURCHASE
@@ -274,8 +277,8 @@ class DayTradingBot:
             self.interest_stock_manager.update_trade_date(symbol)
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
+            self.trade_reporter.add_buy_order_completed(symbol, name)  # 매수 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_SELL
-            self.log(f"[{symbol}] {name} 매수 주문이 체결되었습니다. 매도 주문 단계로 이동합니다.")
 
     def _process_order_sell(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
@@ -295,9 +298,9 @@ class DayTradingBot:
             order = self.immediately_sell(symbol, quantity)
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
-            state.step = TradeStep.WAIT_ACCEPT_SELL
             self.log(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
-            self.log(f"즉시 매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: 시장가")
+            self.trade_reporter.add_immediate_sell_order(symbol, name, quantity)  # 가격이 0인 것은 시장가 주문을 의미한다.
+            state.step = TradeStep.WAIT_ACCEPT_SELL
             return
 
         if not self.price_analysis.is_sell_recommended(symbol, purchase_price):
@@ -308,7 +311,7 @@ class DayTradingBot:
 
         current_price = int(self.price_analysis.items[symbol].candle_stick_5minute[-1].close_price)
         order = self.sell(symbol, quantity, current_price)
-        self.log(f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
+        self.trade_reporter.add_sell_order(symbol, name, quantity, current_price)
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
         state.step = TradeStep.WAIT_ACCEPT_SELL
@@ -340,8 +343,8 @@ class DayTradingBot:
             self.interest_stock_manager.update_trade_date(symbol)
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
+            self.trade_reporter.add_sell_order_completed(symbol, name)  # 매도 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_PURCHASE
-            self.log(f"[{symbol}] {name} 매도 주문이 체결되었습니다. 매수 주문 단계로 이동합니다.")
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:

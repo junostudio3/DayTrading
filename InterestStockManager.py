@@ -29,14 +29,15 @@ class InterestStockManager:
                 print(f"Failed to load interest stocks from {self.cache_file_path}: {e}")
                 self.buy_list = []
                 self.explore_index = 0
-                self.available_delete = False
+                self.keep_7days = False
 
     def save(self):
         os.makedirs(os.path.dirname(self.cache_file_path), exist_ok=True)
         try:
             data = {
                 "buy_list": self.buy_list,
-                "explore_index": self.explore_index
+                "explore_index": self.explore_index,
+                "keep_7days": self.keep_7days
             }
             with open(self.cache_file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
@@ -46,6 +47,7 @@ class InterestStockManager:
     def clear(self):
         self.buy_list = []
         self.explore_index = 0
+        self.keep_7days = False
         self.save()
 
     def update_stock(self, symbol: str, name: str, price: float, volume: int) -> bool:
@@ -84,6 +86,7 @@ class InterestStockManager:
                 self.buy_list.sort(key=lambda x: x["volume"], reverse=True)
                 if volume <= self.buy_list[9]["volume"]:
                     return False
+                self.buy_list.pop()  # 10번째 항목 제거
 
         # 조건을 만족하여 탑 10에 진입하는 새 종목
         self.buy_list.append({
