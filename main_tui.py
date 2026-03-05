@@ -1,5 +1,5 @@
 from DayTradingBot import DayTradingBot
-from trading_engine import TradingEngine
+from TradingEngine import TradingEngine
 from DayTradingTUI import DayTradingTUI
 
 
