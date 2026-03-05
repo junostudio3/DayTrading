@@ -28,7 +28,7 @@ class KisAuthPrice:
         else:
             raise Exception(f"Failed to get average price: {response.status_code} {response.text}")
 
-    def get_one_minute_candlestick(self, symbol: str, hour: int, minute: int):
+    def get_one_minute_candlestick(self, symbol: str, hour: int, minute: int, include_past_data: bool = False):
         """1분봉 조회"""
 
         # fid_input_hour_1은 조회 시작 시간을 HHMMSS 형식으로 입력
@@ -38,7 +38,7 @@ class KisAuthPrice:
             "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
             "fid_input_iscd": symbol,
             "fid_input_hour_1": input_hour, # 조회 시작 시간 (HHMMSS)
-            "fid_pw_data_incu_yn": "N", # 과거 데이터 포함 여부 (Y: 포함, N: 미포함)
+            "fid_pw_data_incu_yn": "Y" if include_past_data else "N", # 과거 데이터 포함 여부 (Y: 포함, N: 미포함)
             "fid_etc_cls_code": "",
         }
 

@@ -7,6 +7,7 @@ from KisKey import app_secret
 from InfoKosdaq import find_kosdaq_by_name, load_kosdaq_master
 from InfoKospi import find_kospi_by_name, load_kospi_master
 from PriceAnalysis import PriceAnalysis
+from InterestStockManager import InterestStockManager
 import time
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -37,18 +38,20 @@ class DayTradingBot:
         self.auth.account.update()
 
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
+        self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
         self.loop_count = 0
         self.is_running = True
         self.symbol_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
         self.monitor_list = []
-        self.buy_list = []
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
+        self.kosdq_records = load_kosdaq_master()
+        self.kospi_records = load_kospi_master()
+        self.all_records = self.kospi_records + self.kosdq_records
 
         # logger를 외부에서 받지 못했으면 print로 로그를 남기도록 한다.
         self.log = log_callback or print
-        self.current_intrest_stock_date = None
         self.update_sell_list()
 
     def run(self):
@@ -138,44 +141,49 @@ class DayTradingBot:
         return self.symbol_states[symbol]
     
     def _collect_interest_stocks(self, now: float):
-        now_date = time.strftime("%Y-%m-%d", time.localtime(now))
-        if self.current_intrest_stock_date == now_date:
-            # 이미 관심 종목을 수집한 경우에는 다시 수집하지 않는다.
+        # 8시부터 4시 30분 사이에만 관심 종목을 탐색한다.
+        # 미리 준비하는 목적이어서 장 시작 조금 전부터 탐색을 시작한다.
+        current_time = time.localtime(now)
+        if current_time.tm_hour < 8 or (current_time.tm_hour == 16 and current_time.tm_min > 30) or current_time.tm_hour > 16:
             return
 
-        kosdq_records = load_kosdaq_master()
-        kospi_records = load_kospi_master()
+        if not self.all_records:
+            return
 
-        # 관심 종목을 리스트로 수집
-        kospi_wish_names = []
-        kospi_wish_names += ["대한항공"]
+        explore_index = self.interest_stock_manager.get_explore_index()
 
-        kosdq_wish_names = []
-        kosdq_wish_names += ["인텍플러스", "고영", "펨트론"]
+        # 한 번 호출 시 하나씩 조회 (인덱스 유지)
+        if explore_index >= len(self.all_records):
+            explore_index = 0
 
-        # 관심 종목 정보 수집
-        for name in kospi_wish_names:
-            results = find_kospi_by_name(name, kospi_records)
-            if results is None or len(results) == 0:
-                self.log(f"{name} 종목을 찾을 수 없습니다.")
-                exit(1)
-            else:
-                self.buy_list.append(results[0])
-                self.monitor_list.append(results[0])
+        record = self.all_records[explore_index]
+        symbol = self._stock_symbol(record)
+        name = self._stock_name(record)
+        
+        self.interest_stock_manager.set_explore_index(explore_index + 1)
 
-        for name in kosdq_wish_names:
-            results = find_kosdaq_by_name(name, kosdq_records)
-            if results is None or len(results) == 0:
-                self.log(f"{name} 종목을 찾을 수 없습니다.")
-                exit(1)
-            else:
-                self.buy_list.append(results[0])
-                self.monitor_list.append(results[0])
+        if not symbol:
+            return
+        
+        changed_list = False
 
-        self.current_intrest_stock_date = now_date
+        try:
+            candle = self.auth.price.get_one_minute_candlestick(symbol, current_time.tm_hour, current_time.tm_min, include_past_data=True)
+            
+            if candle and len(candle) > 0 and "stck_prpr" in candle[0] and "cntg_vol" in candle[0]:
+                price = int(candle[0]["stck_prpr"])
+                volume = int(candle[0]["cntg_vol"])
+
+                if price != 0 and price < 20000:
+                    changed_list |= self.interest_stock_manager.update_stock(symbol, name, price, volume)
+
+        except Exception as e:
+            self.log(f"관심 종목 탐색 중 오류가 발생했습니다. symbol: {symbol}")
+            pass
 
         # 관심 종목은 매수 할 수 있으므로 매도 리스트에도 추가한다.
-        self.update_sell_list()
+        if changed_list:
+            self.update_sell_list()
 
     def _process_step_judge(self, symbol: str, name: str):
         self.update_sell_list()
@@ -547,9 +555,9 @@ class DayTradingBot:
         self.monitor_list = []
         monitor_symbols = set()
         # 먼저 매수 리스트에 있는 종목들을 모니터링 리스트에 추가
-        for item in self.buy_list:
-            self.monitor_list.append(item)
-            symbol = self._stock_symbol(item)
+        for record in self.interest_stock_manager.get_buy_records():
+            self.monitor_list.append(record)
+            symbol = self._stock_symbol(record)
             if symbol:
                 monitor_symbols.add(symbol)
 
