@@ -13,15 +13,15 @@ from TradingEngine import TradingEngine
 
 
 class OrderModal(ModalScreen[dict | None]):
-    def __init__(self, side: str, symbol: str):
+    def __init__(self, side: str, pdno: str):
         super().__init__()
         self.side = side
-        self.symbol = symbol
+        self.pdno = pdno
 
     def compose(self) -> ComposeResult:
         side_text = "매수" if self.side == "buy" else "매도"
         with Vertical(id="order-modal"):
-            yield Label(f"{side_text} 주문: {self.symbol}")
+            yield Label(f"{side_text} 주문: {self.pdno}")
             yield Input(placeholder="수량 입력", id="order-qty")
             with Horizontal():
                 yield Button("확인", variant="success", id="confirm")
@@ -34,7 +34,7 @@ class OrderModal(ModalScreen[dict | None]):
             self.notify("수량은 1 이상의 숫자여야 합니다.", severity="error")
             return
 
-        self.dismiss({"side": self.side, "symbol": self.symbol, "quantity": int(qty_input)})
+        self.dismiss({"side": self.side, "pdno": self.pdno, "quantity": int(qty_input)})
 
     @on(Button.Pressed, "#cancel")
     def on_cancel(self):
@@ -87,8 +87,8 @@ class DayTradingTUI(App):
     def __init__(self, engine: TradingEngine):
         super().__init__()
         self.engine = engine
-        self._watch_symbols: list[str] = []
-        self._holding_symbols: list[str] = []
+        self._watch_pdnos: list[str] = []
+        self._holding_pdnos: list[str] = []
         self._rendered_log_size = 0
         self._last_rendered_timestamp: float | None = None
 
@@ -148,16 +148,16 @@ class DayTradingTUI(App):
     def _render_holdings(self, rows: list[dict]):
         table = self.query_one("#holdings", DataTable)
         table.clear()
-        self._holding_symbols = []
+        self._holding_pdnos = []
         for row in rows:
-            symbol = row.get("symbol", "")
-            self._holding_symbols.append(symbol)
+            pdno = row.get("pdno", "")
+            self._holding_pdnos.append(pdno)
             purchase = row.get("purchase")
             current = row.get("current")
             profit_rate = row.get("profit_rate")
             table.add_row(
-                symbol,
-                row.get("name", symbol),
+                pdno,
+                row.get("name", pdno),
                 str(row.get("qty", 0)),
                 "-" if purchase is None else f"{purchase:,.0f}",
                 "-" if current is None else f"{current:,.0f}",
@@ -167,15 +167,15 @@ class DayTradingTUI(App):
     def _render_watch(self, rows: list[dict]):
         table = self.query_one("#watch", DataTable)
         table.clear()
-        self._watch_symbols = []
+        self._watch_pdnos = []
         for row in rows:
-            symbol = row.get("symbol", "")
-            self._watch_symbols.append(symbol)
+            pdno = row.get("pdno", "")
+            self._watch_pdnos.append(pdno)
             price = row.get("price")
             step = row.get("step", "")
             table.add_row(
-                symbol,
-                row.get("name", symbol),
+                pdno,
+                row.get("name", pdno),
                 "-" if price is None else f"{price:,.0f}",
                 str(row.get("candles", 0)),
                 # 체결량은 3자리마다 콤마로 구분해서 표시한다
@@ -193,46 +193,46 @@ class DayTradingTUI(App):
             log_widget.write(line)
         self._rendered_log_size = len(logs)
 
-    def _selected_symbol(self, side: str) -> str | None:
+    def _selected_pdno(self, side: str) -> str | None:
         watch = self.query_one("#watch", DataTable)
         holdings = self.query_one("#holdings", DataTable)
 
-        if side == "sell" and self.focused == holdings and self._holding_symbols:
+        if side == "sell" and self.focused == holdings and self._holding_pdnos:
             row = holdings.cursor_row
-            if 0 <= row < len(self._holding_symbols):
-                return self._holding_symbols[row]
+            if 0 <= row < len(self._holding_pdnos):
+                return self._holding_pdnos[row]
 
-        if self._watch_symbols:
+        if self._watch_pdnos:
             row = watch.cursor_row
-            if 0 <= row < len(self._watch_symbols):
-                return self._watch_symbols[row]
-            return self._watch_symbols[0]
+            if 0 <= row < len(self._watch_pdnos):
+                return self._watch_pdnos[row]
+            return self._watch_pdnos[0]
 
-        if side == "sell" and self._holding_symbols:
-            return self._holding_symbols[0]
+        if side == "sell" and self._holding_pdnos:
+            return self._holding_pdnos[0]
 
         return None
 
     def action_buy(self):
-        symbol = self._selected_symbol("buy")
-        if not symbol:
+        pdno = self._selected_pdno("buy")
+        if not pdno:
             self.notify("주문할 종목이 없습니다.", severity="warning")
             return
 
-        self.push_screen(OrderModal("buy", symbol), self._on_order_modal_result)
+        self.push_screen(OrderModal("buy", pdno), self._on_order_modal_result)
 
     def action_sell(self):
-        symbol = self._selected_symbol("sell")
-        if not symbol:
+        pdno = self._selected_pdno("sell")
+        if not pdno:
             self.notify("주문할 종목이 없습니다.", severity="warning")
             return
 
-        self.push_screen(OrderModal("sell", symbol), self._on_order_modal_result)
+        self.push_screen(OrderModal("sell", pdno), self._on_order_modal_result)
 
     def _on_order_modal_result(self, result: dict | None):
         if result is None:
             return
 
-        self.engine.submit_order(result["side"], result["symbol"], result["quantity"])
+        self.engine.submit_order(result["side"], result["pdno"], result["quantity"])
         order_text = "매수" if result["side"] == "buy" else "매도"
-        self.notify(f"{order_text} 주문 요청: {result['symbol']} x {result['quantity']}")
+        self.notify(f"{order_text} 주문 요청: {result['pdno']} x {result['quantity']}")

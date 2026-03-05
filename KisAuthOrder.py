@@ -11,18 +11,18 @@ class KisAuthOrder:
         self.auth = auth
 
     # 매수 주문
-    def buy_order_cash(self, symbol: str, quantity: int, price: int, division: OrderDivision = OrderDivision.SETTLE):
+    def buy_order_cash(self, pdno: str, quantity: int, price: int, division: OrderDivision = OrderDivision.SETTLE):
         """현금 매수 주문"""
-        return self.order_cash(symbol, quantity, price, is_buy=True, division=division)
+        return self.order_cash(pdno, quantity, price, is_buy=True, division=division)
     
     # 매도 주문
-    def sell_order_cash(self, symbol: str, quantity: int, price: int, division: OrderDivision = OrderDivision.SETTLE):
+    def sell_order_cash(self, pdno: str, quantity: int, price: int, division: OrderDivision = OrderDivision.SETTLE):
         """현금 매도 주문"""
-        return self.order_cash(symbol, quantity, price, is_buy=False, division=division)
+        return self.order_cash(pdno, quantity, price, is_buy=False, division=division)
     
-    def immediately_sell(self, symbol: str, quantity: int):
+    def immediately_sell(self, pdno: str, quantity: int):
         """즉시 매도 주문 (시장가)"""
-        return self.order_cash(symbol, quantity, price=0, is_buy=False, division=OrderDivision.MARKET)
+        return self.order_cash(pdno, quantity, price=0, is_buy=False, division=OrderDivision.MARKET)
     
     # 매수/매도 체결 확인
     def order_check(self, pd_no: str, order_no: str, is_buy: bool):
@@ -94,13 +94,13 @@ class KisAuthOrder:
             raise Exception(f"Failed to cancel order: {response.status_code} {response.text}")
 
     # 매수/매도 주문 관련
-    def order_cash(self, symbol: str, quantity: int, price: int, is_buy: bool, division: OrderDivision):
+    def order_cash(self, pdno: str, quantity: int, price: int, is_buy: bool, division: OrderDivision):
         """현금 매수/매도 주문"""
 
         if self.auth.is_virtual and division == OrderDivision.MARKET:
             # 모의 투자에서는 시장가 주문이 지원되지 않으므로, 지정가 주문으로 대체한다.
             # 시장가 주문 대신 현재가로 지정가 주문을 한다.
-            candle = self.auth.price.get_one_minute_candlestick(symbol, datetime.datetime.now().hour, datetime.datetime.now().minute)
+            candle = self.auth.price.get_one_minute_candlestick(pdno, datetime.datetime.now().hour, datetime.datetime.now().minute)
             if candle and len(candle) > 0 and "stck_prpr" in candle[0]:
                 price = int(candle[0]["stck_prpr"])
                 division = OrderDivision.SETTLE
@@ -110,7 +110,7 @@ class KisAuthOrder:
         params = {
             "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
             "ACNT_PRDT_CD": "01",  # 계좌번호 체계(8-2)의 뒤 2자리
-            "PDNO": symbol,  # 종목번호
+            "PDNO": pdno,  # 종목번호
             "ORD_DVSN": division.value,
             "ORD_QTY": str(quantity),  # 주문수량
             "ORD_UNPR": str(price),  # 주문가격

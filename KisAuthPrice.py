@@ -6,12 +6,12 @@ class KisAuthPrice:
     def __init__(self, auth: KisAuth):
         self.auth = auth
 
-    def get_average_price_30day(self, symbol: str):
+    def get_average_price_30day(self, pdno: str):
         """30일 평균가 조회"""
 
         params = {
             "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
-            "fid_input_iscd": symbol,
+            "fid_input_iscd": pdno,
             "fid_period_div_code": "W", # 기간 분류 코드 (D:30일, W:30주, M:30개월)
             "fid_org_adj_prc": "1", # 수정주가 여부 (0:미수정, 1:수정)
         }
@@ -28,7 +28,7 @@ class KisAuthPrice:
         else:
             raise Exception(f"Failed to get average price: {response.status_code} {response.text}")
         
-    def get_previous_day_price_and_volume(self, symbol: str):
+    def get_previous_day_price_and_volume(self, pdno: str):
         """전일 종가와 거래량 조회"""
 
         # inquire-daily-itemchartprice API를 사용하여 전일 종가와 거래량을 조회한다.
@@ -37,7 +37,7 @@ class KisAuthPrice:
         input_date2 = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y%m%d")
         params = {
             "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
-            "fid_input_iscd": symbol,
+            "fid_input_iscd": pdno,
             "fid_input_date_1": input_date1, # 조회 시작날짜 (YYYYMMDD)
             "fid_input_date_2": input_date2, # 조회 종료날짜 (YYYYMMDD)
            "fid_period_div_code": "D", # 기간 분류 코드 (D:일간, W:주간, M:월간)
@@ -59,7 +59,7 @@ class KisAuthPrice:
         else:
             raise Exception(f"Failed to get previous day price and volume: {response.status_code} {response.text}")
 
-    def get_one_minute_candlestick(self, symbol: str, hour: int, minute: int, include_past_data: bool = False):
+    def get_one_minute_candlestick(self, pdno: str, hour: int, minute: int, include_past_data: bool = False):
         """1분봉 조회"""
 
         # fid_input_hour_1은 조회 시작 시간을 HHMMSS 형식으로 입력
@@ -67,7 +67,7 @@ class KisAuthPrice:
 
         params = {
             "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
-            "fid_input_iscd": symbol,
+            "fid_input_iscd": pdno,
             "fid_input_hour_1": input_hour, # 조회 시작 시간 (HHMMSS)
             "fid_pw_data_incu_yn": "Y" if include_past_data else "N", # 과거 데이터 포함 여부 (Y: 포함, N: 미포함)
             "fid_etc_cls_code": "",
@@ -87,16 +87,16 @@ class KisAuthPrice:
         else:
             raise Exception(f"Failed to get candlestick data: {response.status_code} {response.text}")
 
-    def get_current(self, symbol: str):
-        price, _ = self.get_current_price_and_accumulated_volume(symbol)
+    def get_current(self, pdno: str):
+        price, _ = self.get_current_price_and_accumulated_volume(pdno)
         return price
 
-    def get_current_price_and_accumulated_volume(self, symbol: str):
+    def get_current_price_and_accumulated_volume(self, pdno: str):
         """현재가와 누적 거래량 조회"""
 
         params = {
             "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
-            "fid_input_iscd": symbol
+            "fid_input_iscd": pdno
         }
 
         response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-price-volume",
@@ -114,13 +114,13 @@ class KisAuthPrice:
         else:
             raise Exception(f"Failed to get current price and accumulated volume: {response.status_code} {response.text}")
 
-    def get_current_overseas(self, symbol: str, exchange: str):
+    def get_current_overseas(self, pdno: str, exchange: str):
         """현재가 조회 """
 
         params = {
             "AUTH": "",
             "EXCD": exchange,
-            "SYMB": symbol
+            "SYMB": pdno
         }
 
         response = self.auth.request("/uapi/overseas-price/v1/quotations/price",

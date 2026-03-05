@@ -10,10 +10,10 @@ class KisAuthAccount:
         self.nxdy_excc_amt = 0  # D+1 예수금
         self.prvs_rcdl_excc_amt = 0  # D+2 예수금
         self.stocks = []  # 주식 잔고 정보
-        self.stocks_by_symbol = {}  # {pdno: stock}
+        self.stocks_by_pdno = {}  # {pdno: stock}
 
-    def _rebuild_stocks_by_symbol(self):
-        self.stocks_by_symbol = {
+    def _rebuild_stocks_by_pdno(self):
+        self.stocks_by_pdno = {
             stock.get("pdno", ""): stock
             for stock in self.stocks
             if stock.get("pdno", "")
@@ -89,14 +89,14 @@ class KisAuthAccount:
                 # output은 리스트 형태이다.
                 if isinstance(output, list):
                     self.stocks = output  # 잔고 정보 저장
-                    self._rebuild_stocks_by_symbol()
+                    self._rebuild_stocks_by_pdno()
                 else:
                     self.stocks = []  # 잔고 정보가 없으면 빈 리스트로 초기화
-                    self._rebuild_stocks_by_symbol()
+                    self._rebuild_stocks_by_pdno()
             else:
                 self.stocks = []  # 잔고 정보가 없으면 빈 리스트로 초기화
-                self._rebuild_stocks_by_symbol()
+                self._rebuild_stocks_by_pdno()
         else:
             self.stocks = []  # 잔고 정보가 없으면 빈 리스트로 초기화
-            self._rebuild_stocks_by_symbol()
+            self._rebuild_stocks_by_pdno()
             raise Exception(f"Failed to update stock balance: {response.status_code} {response.text}")

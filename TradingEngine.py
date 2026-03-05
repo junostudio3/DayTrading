@@ -34,8 +34,8 @@ class TradingEngine:
             self._thread.join(timeout=3)
         self.bot.price_analysis.save_cache()
 
-    def submit_order(self, side: str, symbol: str, quantity: int):
-        self._order_queue.put({"side": side, "symbol": symbol, "quantity": quantity})
+    def submit_order(self, side: str, pdno: str, quantity: int):
+        self._order_queue.put({"side": side, "pdno": pdno, "quantity": quantity})
 
     def get_snapshot(self) -> dict[str, Any]:
         with self._snapshot_lock:
@@ -55,20 +55,20 @@ class TradingEngine:
                 break
 
             side = order.get("side", "")
-            symbol = order.get("symbol", "")
+            pdno = order.get("pdno", "")
             quantity = int(order.get("quantity", 0))
 
             try:
                 if side == "buy":
-                    self.bot.place_manual_buy(symbol, quantity)
-                    self._append_log(f"수동 매수 완료: {symbol}, 수량 {quantity}")
+                    self.bot.place_manual_buy(pdno, quantity)
+                    self._append_log(f"수동 매수 완료: {pdno}, 수량 {quantity}")
                 elif side == "sell":
-                    self.bot.place_manual_sell(symbol, quantity)
-                    self._append_log(f"수동 매도 완료: {symbol}, 수량 {quantity}")
+                    self.bot.place_manual_sell(pdno, quantity)
+                    self._append_log(f"수동 매도 완료: {pdno}, 수량 {quantity}")
                 else:
                     self._append_log(f"알 수 없는 주문 타입: {side}")
             except Exception as e:
-                self._append_log(f"주문 실패: {symbol} / {e}")
+                self._append_log(f"주문 실패: {pdno} / {e}")
 
     def _run_loop(self):
         self._append_log("거래 엔진 시작")

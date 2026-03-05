@@ -2,11 +2,21 @@ import json
 import os
 import time
 from typing import List, Dict, Any
+from StockItem import StockItem
+
+
+class InterestStockItem:
+    def __init__(self, pdno: str, prdt_name: str, price: float, volume: int, added_at: float):
+        self.stock = StockItem(pdno, prdt_name)
+        self.price = price
+        self.volume = volume
+        self.added_at = added_at
+
 
 class InterestStockManager:
     def __init__(self, cache_file_path: str = "./cache/interest_stocks.json"):
         self.cache_file_path = cache_file_path
-        self.buy_list: List[Dict[str, Any]] = []
+        self.buy_list: List[InterestStockItem] = []
         self.explore_index: int = 0
         self.keep_7days: bool = False
         self.load()
@@ -16,15 +26,18 @@ class InterestStockManager:
             try:
                 with open(self.cache_file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if isinstance(data, dict):
-                        self.buy_list = data.get("buy_list", [])
-                        self.explore_index = data.get("explore_index", 0)
-                        self.keep_7days = data.get("keep_7days", False)
-                    elif isinstance(data, list):
-                        # 이전 버전 호환: 리스트 형태로 저장된 경우 buy_list로 간주
-                        self.buy_list = data
-                        self.explore_index = 0
-                        self.keep_7days = False
+
+                    for item in data.get("buy_list", []):
+                        record = item.get("record", {})
+                        pdno = record.get("pdno", "")
+                        prdt_name = record.get("prdt_name", "")
+                        price = item.get("price", 0)
+                        volume = item.get("volume", 0)
+                        added_at = item.get("added_at", time.time())
+                        self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, added_at))
+
+                    self.explore_index = data.get("explore_index", 0)
+                    self.keep_7days = data.get("keep_7days", False)
             except Exception as e:
                 print(f"Failed to load interest stocks from {self.cache_file_path}: {e}")
                 self.buy_list = []
@@ -35,7 +48,18 @@ class InterestStockManager:
         os.makedirs(os.path.dirname(self.cache_file_path), exist_ok=True)
         try:
             data = {
-                "buy_list": self.buy_list,
+                "buy_list": [
+                    {
+                        "record": {
+                            "pdno": item.stock.pdno,
+                            "prdt_name": item.stock.prdt_name,
+                        },
+                        "price": item.price,
+                        "volume": item.volume,
+                        "added_at": "" if item.added_at is None else item.added_at
+                    }
+                    for item in self.buy_list
+                ],
                 "explore_index": self.explore_index,
                 "keep_7days": self.keep_7days
             }
@@ -50,8 +74,8 @@ class InterestStockManager:
         self.keep_7days = False
         self.save()
 
-    def update_stock(self, symbol: str, name: str, price: float, volume: int) -> bool:
-        existing = next((item for item in self.buy_list if item["record"].get("pdno") == symbol), None)
+    def update_stock(self, pdno: str, name: str, price: float, volume: int) -> bool:
+        existing = next((item for item in self.buy_list if item.stock.pdno == pdno), None)
 
         if price <= 0 or price > 20000:
             if existing:
@@ -61,11 +85,11 @@ class InterestStockManager:
             return False
 
         if existing:
-            existing["price"] = price
-            existing["volume"] = volume
-            if "added_at" not in existing:
-                existing["added_at"] = time.time()
-            self.buy_list.sort(key=lambda x: x["volume"], reverse=True)
+            existing.price = price
+            existing.volume = volume
+            if existing.added_at is None:
+                existing.added_at = time.time()
+            self.buy_list.sort(key=lambda x: x.volume, reverse=True)
             self.save()
             return False
 
@@ -75,50 +99,38 @@ class InterestStockManager:
             if self.keep_7days:
                 now = time.time()
                 seven_days = 7 * 24 * 60 * 60
-                candidates = [item for item in self.buy_list if (now - item.get("added_at", now)) > seven_days]
+                candidates = [item for item in self.buy_list if (now - item.added_at) > seven_days]
             
             if candidates:
                 # 일주일 이상된 항목이 있다면 그 중 가장 낮은 거래량을 가진 항목을 찾아서 제거한다
-                lowest_volume_item = min(candidates, key=lambda x: x["volume"])
+                lowest_volume_item = min(candidates, key=lambda x: x.volume)
                 self.buy_list.remove(lowest_volume_item)
             else:
                 # volume이 10번째 종목보다 작으면 탑 10에 들 수 없으므로 무시
-                self.buy_list.sort(key=lambda x: x["volume"], reverse=True)
-                if volume <= self.buy_list[9]["volume"]:
+                self.buy_list.sort(key=lambda x: x.volume, reverse=True)
+                if volume <= self.buy_list[9].volume:
                     return False
                 self.buy_list.pop()  # 10번째 항목 제거
 
         # 조건을 만족하여 탑 10에 진입하는 새 종목
-        self.buy_list.append({
-            "record": {
-                "pdno": symbol,
-                "prdt_name": name,
-            },
-            "price": price,
-            "volume": volume,
-            "added_at": time.time()
-        })
-
-        self.buy_list.sort(key=lambda x: x["volume"], reverse=True)
+        self.buy_list.append(InterestStockItem(pdno, name, price, volume, time.time()))
+        self.buy_list.sort(key=lambda x: x.volume, reverse=True)
         self.save()
 
         return True
 
-    def update_trade_date(self, symbol: str):
-        existing = next((item for item in self.buy_list if item["record"].get("pdno") == symbol), None)
+    def update_trade_date(self, pdno: str):
+        existing = next((item for item in self.buy_list if item.stock.pdno == pdno), None)
         if existing:
-            existing["added_at"] = time.time()
+            existing.added_at = time.time()
             self.save()
 
     def enable_keep_7days(self):
         self.keep_7days = True
         self.save()
 
-    def get_buy_list(self) -> List[Dict[str, Any]]:
-        return self.buy_list
-
-    def get_buy_records(self) -> List[Dict[str, str]]:
-        return [item["record"] for item in self.buy_list]
+    def get_stocks(self) -> List[StockItem]:
+        return [item.stock for item in self.buy_list]
 
     def set_explore_index(self, index: int):
         self.explore_index = index

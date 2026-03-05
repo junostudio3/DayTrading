@@ -5,12 +5,12 @@ from datetime import datetime
 from Candlestick import Candlestick
 
 class PriceAnalysisItem:
-    def __init__(self, symbol, name, cache_dir):
-        self.symbol = symbol
+    def __init__(self, pdno, name, cache_dir):
+        self.pdno = pdno
         self.name = name
         self.candle_stick_5minute: list[Candlestick] = []
-        # path to SQLite file for this symbol
-        self.db_path = os.path.join(cache_dir, f"{symbol}.db")
+        # path to SQLite file for this pdno
+        self.db_path = os.path.join(cache_dir, f"{pdno}.db")
         self._ensure_db()
         self._load_from_db()
 

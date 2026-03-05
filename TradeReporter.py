@@ -5,24 +5,24 @@ class TradeReporter:
     def __init__(self, bot: DayTradingBot):
         self.bot = bot
 
-    def add_buy_order(self, symbol: str, name:  str, quantity: int, price: int):
-        text = f"매수 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {price}"
+    def add_buy_order(self, pdno: str, name:  str, quantity: int, price: int):
+        text = f"매수 주문: [{pdno}] {name} / 수량: {quantity} / 가격: {price}"
         self._add_log(text)
         
-    def add_buy_order_completed(self, symbol: str, name:  str):
-        text = f"매수 체결: [{symbol}] {name}"
+    def add_buy_order_completed(self, pdno: str, name:  str):
+        text = f"매수 체결: [{pdno}] {name}"
         self._add_log(text)
 
-    def add_sell_order(self, symbol: str, name:  str, quantity: int, price: int):
-        text = f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {price}"
+    def add_sell_order(self, pdno: str, name:  str, quantity: int, price: int):
+        text = f"매도 주문: [{pdno}] {name} / 수량: {quantity} / 가격: {price}"
         self._add_log(text)
 
-    def add_immediate_sell_order(self, symbol: str, name:  str, quantity: int):
-        text = f"즉시 매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: 시장가"
+    def add_immediate_sell_order(self, pdno: str, name:  str, quantity: int):
+        text = f"즉시 매도 주문: [{pdno}] {name} / 수량: {quantity} / 가격: 시장가"
         self._add_log(text)
   
-    def add_sell_order_completed(self, symbol: str, name:  str):
-        text = f"매도 체결: [{symbol}] {name}"
+    def add_sell_order_completed(self, pdno: str, name:  str):
+        text = f"매도 체결: [{pdno}] {name}"
         self._add_log(text)
 
     def _add_log(self, text: str):
