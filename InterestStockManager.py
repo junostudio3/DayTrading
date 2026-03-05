@@ -45,6 +45,22 @@ class InterestStockManager:
     def update_stock(self, symbol: str, name: str, price: float, volume: int) -> bool:
         existing = next((item for item in self.buy_list if item["record"].get("pdno") == symbol), None)
 
+        if price <= 0:
+            # 가격이 0이하인 경우는 관심 종목에서 제거한다.
+            if existing:
+                self.buy_list.remove(existing)
+                self.save()
+                return True  # 종목이 제거되었으므로 리스트가 변경되었다고 간주한다.
+            return False  # 종목이 존재하지 않으므로 리스트 변경이 없다.
+
+        if price > 20000:
+            # 가격이 너무 높으면 단타가 어려울 수 있으므로 관심 종목에서 제거한다.
+            if existing:
+                self.buy_list.remove(existing)
+                self.save()
+                return True  # 종목이 제거되었으므로 리스트가 변경되었다고 간주한다.
+            return False  # 종목이 존재하지 않으므로 리스트 변경이 없다.
+
         if existing:
             existing["price"] = price
             existing["volume"] = volume

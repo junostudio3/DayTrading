@@ -174,8 +174,7 @@ class DayTradingBot:
                 price = int(candle[0]["stck_prpr"])
                 volume = int(candle[0]["cntg_vol"])
 
-                if price != 0 and price < 20000:
-                    changed_list |= self.interest_stock_manager.update_stock(symbol, name, price, volume)
+                changed_list |= self.interest_stock_manager.update_stock(symbol, name, price, volume)
 
         except Exception as e:
             self.log(f"관심 종목 탐색 중 오류가 발생했습니다. symbol: {symbol}")
