@@ -109,7 +109,7 @@ class DayTradingTUI(App):
         watch.cursor_type = "row"
 
         holdings.add_columns("종목", "이름", "수량", "매입가", "현재가", "손익률")
-        watch.add_columns("종목", "이름", "현재가", "캔들수", "체결량")
+        watch.add_columns("종목", "이름", "현재가", "캔들수", "체결량", "진행")
 
         self.engine.start()
         self.set_interval(1.0, self.refresh_dashboard)
@@ -170,6 +170,7 @@ class DayTradingTUI(App):
             symbol = row.get("symbol", "")
             self._watch_symbols.append(symbol)
             price = row.get("price")
+            step = row.get("step", "")
             table.add_row(
                 symbol,
                 row.get("name", symbol),
@@ -177,6 +178,7 @@ class DayTradingTUI(App):
                 str(row.get("candles", 0)),
                 # 체결량은 3자리마다 콤마로 구분해서 표시한다
                 f"{row.get('volume', 0):,}",
+                step
             )
 
     def _render_logs(self, logs: list[str]):

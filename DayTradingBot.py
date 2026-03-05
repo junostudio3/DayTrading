@@ -10,16 +10,8 @@ from PriceAnalysis import PriceAnalysis
 from InterestStockManager import InterestStockManager
 import time
 from dataclasses import dataclass
-from enum import Enum, auto
 from typing import Any, Optional
-
-
-class TradeStep(Enum):
-    JUDGE_STEP = auto()
-    ORDER_BUY = auto()
-    CHECK_BUY = auto()
-    ORDER_SELL = auto()
-    CHECK_SELL = auto()
+from TradeStep import TradeStep
 
 
 @dataclass
@@ -191,12 +183,12 @@ class DayTradingBot:
 
         # self.auth.account.stocks 내에 현재 심볼이 존재하는지 확인하여 매도 주문 단계로 이동
         if self._find_inventory(symbol) is not None:
-            state.step = TradeStep.ORDER_SELL
+            state.step = TradeStep.DECIDE_ON_SELL
             self.log(f"[{symbol}] {name} 보유 수량이 확인되어 매도 주문 단계로 이동합니다.")
             return
         else:
             # 보유 수량이 없는 경우 매수 주문 단계로 이동
-            state.step = TradeStep.ORDER_BUY
+            state.step = TradeStep.DECIDE_ON_PURCHASE
             self.log(f"[{symbol}] {name} 보유 수량이 없어서 매수 주문 단계로 이동합니다.")
             return
 
@@ -252,13 +244,13 @@ class DayTradingBot:
         self.log(f"매수 주문: [{symbol}] {name} / 수량: {order_quantity} / 가격: {current_price}")
         state.buy_order_no = order_no
         state.buy_order_requested_at = time.time()
-        state.step = TradeStep.CHECK_BUY
+        state.step = TradeStep.WAIT_ACCEPT_PURCHASE
 
     def _process_step_buy_check(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         if not state.buy_order_no:
             state.buy_order_requested_at = 0.0
-            state.step = TradeStep.ORDER_BUY
+            state.step = TradeStep.DECIDE_ON_PURCHASE
             self.log(f"{symbol}] {name} 매수 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
             return
 
@@ -280,14 +272,14 @@ class DayTradingBot:
             self.update_account_stock()
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
-            state.step = TradeStep.ORDER_SELL
+            state.step = TradeStep.DECIDE_ON_SELL
             self.log(f"[{symbol}] {name} 매수 주문이 체결되었습니다. 매도 주문 단계로 이동합니다.")
 
     def _process_order_sell(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         inventory = self._find_inventory(symbol)
         if inventory is None:
-            state.step = TradeStep.ORDER_BUY
+            state.step = TradeStep.DECIDE_ON_PURCHASE
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
             self.log(f"[{symbol}] {name} 매도를 준비하려 했으나 보유 수량이 없습니다. 매수 주문 단계로 이동합니다.")
@@ -301,7 +293,7 @@ class DayTradingBot:
             order = self.immediately_sell(symbol, quantity)
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
-            state.step = TradeStep.CHECK_SELL
+            state.step = TradeStep.WAIT_ACCEPT_SELL
             self.log(f"손절 추천: [{symbol}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
             self.log(f"즉시 매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: 시장가")
             return
@@ -317,13 +309,13 @@ class DayTradingBot:
         self.log(f"매도 주문: [{symbol}] {name} / 수량: {quantity} / 가격: {current_price}")
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
-        state.step = TradeStep.CHECK_SELL
+        state.step = TradeStep.WAIT_ACCEPT_SELL
 
     def _process_step_sell_check(self, symbol: str, name: str):
         state = self._get_trade_state(symbol)
         if not state.sell_order_no:
             state.sell_order_requested_at = 0.0
-            state.step = TradeStep.ORDER_BUY
+            state.step = TradeStep.DECIDE_ON_PURCHASE
             self.log(f"[{symbol}] {name} 매도 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
             return
 
@@ -345,7 +337,7 @@ class DayTradingBot:
             self.update_account_stock()
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
-            state.step = TradeStep.ORDER_BUY
+            state.step = TradeStep.DECIDE_ON_PURCHASE
             self.log(f"[{symbol}] {name} 매도 주문이 체결되었습니다. 매수 주문 단계로 이동합니다.")
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
@@ -409,20 +401,20 @@ class DayTradingBot:
             if step == TradeStep.JUDGE_STEP:
                 # step0: 스탭판단
                 self._process_step_judge(symbol, name)
-            elif step == TradeStep.ORDER_BUY:
+            elif step == TradeStep.DECIDE_ON_PURCHASE:
                 # step1: 매수 가능 확인 (매수 주문 후 step2)
                 self._process_step_order_buy(symbol, name)
-            elif step == TradeStep.CHECK_BUY:
+            elif step == TradeStep.WAIT_ACCEPT_PURCHASE:
                 # step2: 체결 확인 자리(현재는 step3으로 패스)
                 self._process_step_buy_check(symbol, name)
-            elif step == TradeStep.ORDER_SELL:
+            elif step == TradeStep.DECIDE_ON_SELL:
                 # step3: 매도 가능 확인 (매도 주문 후 step4)
                 self._process_order_sell(symbol, name)
-            elif step == TradeStep.CHECK_SELL:
+            elif step == TradeStep.WAIT_ACCEPT_SELL:
                 # step4: 체결 확인 자리(현재는 step1으로 패스)
                 self._process_step_sell_check(symbol, name)
             else:
-                state.step = TradeStep.ORDER_BUY
+                state.step = TradeStep.DECIDE_ON_PURCHASE
 
         self.loop_count += 1
         if self.loop_count % 60 == 0:
@@ -462,7 +454,7 @@ class DayTradingBot:
                 "price": current_price,
                 "candles": candle_count,
                 "volume": volume,
-                "step": self._get_trade_state(symbol).step.name,
+                "step": self._get_trade_state(symbol).step.GetAbbreviation(),
             })
 
         holdings_rows = []
