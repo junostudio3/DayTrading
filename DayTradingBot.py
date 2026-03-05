@@ -563,14 +563,16 @@ class DayTradingBot:
                 monitor_symbols.add(symbol)
 
     def update_account_stock(self):
+        try_count = 0
         while True:
             try:
                 self.auth.account.update_stock()
                 break
             except Exception as e:
-                self.log(f"계좌 정보 업데이트 실패: {e}")
+                if try_count >= 5:
+                    self.log(f"계좌 정보 업데이트 실패: {e}")
                 time.sleep(1)  # 잠시 대기 후 재시도
-                continue
+                try_count += 1
 
     def buy(self, symbol: str, quantity: int, price: int):
         """현금 매수 주문"""
