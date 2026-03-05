@@ -168,16 +168,17 @@ class DayTradingBot:
         changed_list = False
 
         try:
-            candle = self.auth.price.get_one_minute_candlestick(symbol, current_time.tm_hour, current_time.tm_min, include_past_data=True)
+            # 관심 종목의 전일 종가와 거래량을 조회하여 관심 종목 리스트를 업데이트한다.
+            price, volume = self.auth.price.get_previous_day_price_and_volume(symbol)
             
-            if candle and len(candle) > 0 and "stck_prpr" in candle[0] and "cntg_vol" in candle[0]:
-                price = int(candle[0]["stck_prpr"])
-                volume = int(candle[0]["cntg_vol"])
+            if price is not None and volume is not None:
+                price = int(price)
+                volume = int(volume)
 
                 changed_list |= self.interest_stock_manager.update_stock(symbol, name, price, volume)
 
         except Exception as e:
-            self.log(f"관심 종목 탐색 중 오류가 발생했습니다. symbol: {symbol}")
+            self.log(f"관심 종목 탐색 중 오류가 발생했습니다. symbol: {symbol} name: {name} error: {e}")
             pass
 
         # 관심 종목은 매수 할 수 있으므로 매도 리스트에도 추가한다.
@@ -445,28 +446,22 @@ class DayTradingBot:
             item = self.price_analysis.items.get(symbol)
             current_price = None
             candle_count = 0
-            buy_recommended = False
-            sell_recommended = False
-            stop_loss_recommended = False
+            volume = 0
             if item is not None and item.candle_stick_5minute:
                 candle_count = len(item.candle_stick_5minute)
                 current_price = item.candle_stick_5minute[-1].close_price
-                buy_recommended = self.price_analysis.is_purchase_recommended(symbol)
+                volume = item.candle_stick_5minute[-1].volume
 
                 inventory = self.auth.account.stocks_by_symbol.get(symbol)
                 if inventory is not None:
                     purchase_price = float(inventory['pchs_avg_pric'])
-                    sell_recommended = self.price_analysis.is_sell_recommended(symbol, purchase_price)
-                    stop_loss_recommended = self.price_analysis.is_sell_stop_loss_recommended(symbol, purchase_price)
 
             watch_rows.append({
                 "symbol": symbol,
                 "name": symbol_to_name.get(symbol, symbol),
                 "price": current_price,
                 "candles": candle_count,
-                "buy": buy_recommended,
-                "sell": sell_recommended,
-                "stop": stop_loss_recommended,
+                "volume": volume,
                 "step": self._get_trade_state(symbol).step.name,
             })
 

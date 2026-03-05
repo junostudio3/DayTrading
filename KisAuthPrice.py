@@ -27,6 +27,37 @@ class KisAuthPrice:
             raise Exception(f"Failed to get average price: {data.get('msg_cd')} {data.get('msg1')}")
         else:
             raise Exception(f"Failed to get average price: {response.status_code} {response.text}")
+        
+    def get_previous_day_price_and_volume(self, symbol: str):
+        """전일 종가와 거래량 조회"""
+
+        # inquire-daily-itemchartprice API를 사용하여 전일 종가와 거래량을 조회한다.
+        # 일주일~어제까지 조회하자 (쉬는 날이 있을 수 있으므로)
+        input_date1 = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y%m%d")
+        input_date2 = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y%m%d")
+        params = {
+            "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
+            "fid_input_iscd": symbol,
+            "fid_input_date_1": input_date1, # 조회 시작날짜 (YYYYMMDD)
+            "fid_input_date_2": input_date2, # 조회 종료날짜 (YYYYMMDD)
+           "fid_period_div_code": "D", # 기간 분류 코드 (D:일간, W:주간, M:월간)
+            "fid_org_adj_prc": "1", # 수정주가 여부 (0:미수정, 1:수정)
+        }
+
+        response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                                     "FHKST03010100", # 국내 주식 일간 차트 가격 조회 트랜잭션 ID
+                                     params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("rt_cd") == "0" and "output2" in data and isinstance(data["output2"], list) and len(data["output2"]) > 0:
+                previous_day_data = data["output2"][0] # 가장 최근 일간 데이터 (전일 데이터)
+                price = float(previous_day_data["stck_clpr"]) # 전일 종가
+                volume = int(previous_day_data["acml_vol"]) # 누적 거래량
+                return price, volume
+            raise Exception(f"Failed to get previous day price and volume: {data.get('msg_cd')} {data.get('msg1')}")
+        else:
+            raise Exception(f"Failed to get previous day price and volume: {response.status_code} {response.text}")
 
     def get_one_minute_candlestick(self, symbol: str, hour: int, minute: int, include_past_data: bool = False):
         """1분봉 조회"""
