@@ -10,14 +10,14 @@ class TradeStep(Enum):
 
     def GetAbbreviation(self) -> str:
         if self == TradeStep.JUDGE_STEP:
-            return "판단"
+            return "판단중"
         elif self == TradeStep.DECIDE_ON_PURCHASE:
-            return "매수결정"
+            return "매수결정중"
         elif self == TradeStep.WAIT_ACCEPT_PURCHASE:
-            return "매수대기"
+            return "매수대기중"
         elif self == TradeStep.DECIDE_ON_SELL:
-            return "매도결정"
+            return "매도결정중"
         elif self == TradeStep.WAIT_ACCEPT_SELL:
-            return "매도대기"
+            return "매도대기중"
         else:
             return "알 수 없음"

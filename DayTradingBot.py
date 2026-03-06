@@ -300,7 +300,7 @@ class DayTradingBot:
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
             self.log(f"손절 추천: [{pdno}] {name} / 구매가: {purchase_price} / 현재가: {current_price}")
-            self.trade_reporter.add_immediate_sell_order(pdno, name, quantity)  # 가격이 0인 것은 시장가 주문을 의미한다.
+            self.trade_reporter.add_immediate_sell_order(pdno, name, quantity, current_price)  # 가격이 0인 것은 시장가 주문을 의미한다.
             state.step = TradeStep.WAIT_ACCEPT_SELL
             return
 

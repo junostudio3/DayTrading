@@ -34,6 +34,9 @@ class InterestStockManager:
                         price = item.get("price", 0)
                         volume = item.get("volume", 0)
                         added_at = item.get("added_at", time.time())
+                        if self.is_avoided(pdno, prdt_name):
+                            # 옛날에 저장된 항목 중 피해야 할 종목이 있을 수 있으므로 로드 시에도 체크한다
+                            continue
                         self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, added_at))
 
                     self.explore_index = data.get("explore_index", 0)
@@ -73,8 +76,17 @@ class InterestStockManager:
         self.explore_index = 0
         self.keep_7days = False
         self.save()
+  
+    def is_avoided(self, pdno: str, name: str) -> bool:
+        # 이름에 인버스 또는 레버가 포함된 종목은 피한다
+        if "인버스" in name or "레버" in name:
+            return True
+        return False
 
     def update_stock(self, pdno: str, name: str, price: float, volume: int) -> bool:
+        if self.is_avoided(pdno, name):
+            return False
+        
         existing = next((item for item in self.buy_list if item.stock.pdno == pdno), None)
 
         if price <= 0 or price > 20000:

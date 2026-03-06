@@ -17,8 +17,8 @@ class TradeReporter:
         text = f"매도 주문: [{pdno}] {name} / 수량: {quantity} / 가격: {price}"
         self._add_log(text)
 
-    def add_immediate_sell_order(self, pdno: str, name:  str, quantity: int):
-        text = f"즉시 매도 주문: [{pdno}] {name} / 수량: {quantity} / 가격: 시장가"
+    def add_immediate_sell_order(self, pdno: str, name:  str, quantity: int, current_price: int):
+        text = f"즉시 매도 주문: [{pdno}] {name} / 수량: {quantity} / 가격: 시장가 (모니터링된 가격: {current_price})"
         self._add_log(text)
   
     def add_sell_order_completed(self, pdno: str, name:  str):
