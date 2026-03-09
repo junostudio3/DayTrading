@@ -230,11 +230,11 @@ class PriceAnalysisItem:
         if ema20 <= ema60:
             return False
 
-        prev_close = closes[-2]
+        prev_low = candles[-2].low_price
         last_close = closes[-1]
 
-        # 눌림 후 20EMA 재돌파
-        if prev_close < ema20 and last_close > ema20:
+        # EMA20 터치 후 반등 확인
+        if prev_low <= ema20 and last_close > ema20:
             if candles[-1].is_bullish():
                 return True
 

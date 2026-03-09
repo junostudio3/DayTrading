@@ -83,11 +83,11 @@ class InterestStockManager:
             return True
         
         # 가격이 너무 큰 종목은 피한다 (하드코딩)
-        if price > 20000:
+        if price > 25000:
             return True
 
         # 가격이 너무 낮은 종목은 % 계산시 작은 값으로도 큰 변동이 발생할 수 있으므로 피한다 (하드코딩)
-        if price <= 4000:
+        if price <= 7000:
             return True
 
         return False

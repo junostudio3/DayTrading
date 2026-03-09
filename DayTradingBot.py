@@ -561,8 +561,9 @@ class DayTradingBot:
         # 재고로 가지고 있는 건 모두 모니터링 리스트에 추가
         for stock in self.auth.account.stocks:
             pdno = stock.get('pdno', '')
+            prdt_name = stock.get('prdt_name', '')
             if pdno and pdno not in monitor_pdnos:
-                self.monitor_list.append(stock)
+                self.monitor_list.append(StockItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
 
     def update_account_stock(self):
