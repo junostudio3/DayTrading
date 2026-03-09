@@ -34,7 +34,11 @@ class TradeReporter:
         self._add_log(text)
 
     def _add_log(self, text: str):
-        self.bot.log(text)
+        trade_log = getattr(self.bot, "trade_log", None)
+        if callable(trade_log):
+            trade_log(text)
+        else:
+            self.bot.log(text)
 
         # ./report/ 폴더에 거래 기록을 텍스트 파일의 끝에 추가한다. (파일명: YYYY-MM-DD.txt)
         date_str = time.strftime("%Y-%m-%d", time.localtime())
@@ -45,5 +49,4 @@ class TradeReporter:
                 f.write(f"[{timestamp}] {text}\n")
         except Exception as e:
             print(f"Failed to write trade log to {log_file_path}: {e}")
-
 

@@ -26,7 +26,7 @@ class TradeState:
 class DayTradingBot:
     ORDER_TIMEOUT_SECONDS = 60 * 5
 
-    def __init__(self, log_callback=None):
+    def __init__(self):
         self.auth = KisAuth(app_key, app_secret, app_account, app_is_virtual, app_domain)
         self.auth.account.update()
 
@@ -43,8 +43,8 @@ class DayTradingBot:
         self.kospi_records = load_kospi_master()
         self.all_records = self.kospi_records + self.kosdq_records
 
-        # logger를 외부에서 받지 못했으면 print로 로그를 남기도록 한다.
-        self.log = log_callback or print
+        # print로 로그를 남기도록 한다.
+        self.log = print
         self.update_sell_list()
 
         from TradeReporter import TradeReporter

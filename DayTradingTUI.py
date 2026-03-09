@@ -7,7 +7,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Static
+from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Static, TabbedContent, TabPane
 
 from TradingEngine import TradingEngine
 
@@ -68,10 +68,18 @@ class DayTradingTUI(App):
         border: solid #666666;
     }
 
-    #logs {
+    #log-tabs {
         height: 12;
-        border: solid #666666;
         margin: 1 0 0 0;
+    }
+
+    .log-pane {
+        border: solid #666666;
+        padding: 0;
+    }
+
+    .log-pane RichLog {
+        height: 1fr;
     }
 
     #order-modal {
@@ -89,7 +97,10 @@ class DayTradingTUI(App):
         self.engine = engine
         self._watch_pdnos: list[str] = []
         self._holding_pdnos: list[str] = []
-        self._rendered_log_size = 0
+        self._rendered_log_sizes = {
+            "logs": 0,
+            "trade_logs": 0,
+        }
         self._last_rendered_timestamp: float | None = None
 
     def compose(self) -> ComposeResult:
@@ -98,7 +109,11 @@ class DayTradingTUI(App):
         with Horizontal(id="tables"):
             yield DataTable(id="holdings")
             yield DataTable(id="watch")
-        yield RichLog(id="logs", wrap=True, markup=False, auto_scroll=True)
+        with TabbedContent(initial="trade-logs-pane", id="log-tabs"):
+            with TabPane("거래 로그", id="trade-logs-pane", classes="log-pane"):
+                yield RichLog(id="trade-logs", wrap=True, markup=False, auto_scroll=True)
+            with TabPane("일반 로그", id="logs-pane", classes="log-pane"):
+                yield RichLog(id="logs", wrap=True, markup=False, auto_scroll=True)
         yield Footer()
 
     def on_mount(self):
@@ -143,7 +158,8 @@ class DayTradingTUI(App):
 
         self._render_holdings(snapshot.get("holdings", []))
         self._render_watch(snapshot.get("watch", []))
-        self._render_logs(snapshot.get("logs", []))
+        self._render_logs("logs", snapshot.get("logs", []))
+        self._render_logs("trade-logs", snapshot.get("trade_logs", []))
 
     def _render_holdings(self, rows: list[dict]):
         table = self.query_one("#holdings", DataTable)
@@ -183,15 +199,17 @@ class DayTradingTUI(App):
                 step
             )
 
-    def _render_logs(self, logs: list[str]):
-        log_widget = self.query_one("#logs", RichLog)
-        if len(logs) < self._rendered_log_size:
+    def _render_logs(self, widget_id: str, logs: list[str]):
+        log_widget = self.query_one(f"#{widget_id}", RichLog)
+        log_key = widget_id.replace("-", "_")
+        rendered_log_size = self._rendered_log_sizes[log_key]
+        if len(logs) < rendered_log_size:
             log_widget.clear()
-            self._rendered_log_size = 0
+            rendered_log_size = 0
 
-        for line in logs[self._rendered_log_size:]:
+        for line in logs[rendered_log_size:]:
             log_widget.write(line)
-        self._rendered_log_size = len(logs)
+        self._rendered_log_sizes[log_key] = len(logs)
 
     def _selected_pdno(self, side: str) -> str | None:
         watch = self.query_one("#watch", DataTable)

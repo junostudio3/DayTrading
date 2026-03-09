@@ -14,6 +14,7 @@ class TradingEngine:
         # via its `log` attribute will be funneled through _append_log.
         # This allows automated orders from the bot to appear in engine logs.
         self.bot.log = self._append_log
+        self.bot.trade_log = self._append_trade_log
 
         self.interval_seconds = max(1, min(5, interval_seconds))
         self._stop_event = threading.Event()
@@ -21,6 +22,7 @@ class TradingEngine:
         self._snapshot_lock = threading.Lock()
         self._latest_snapshot: dict[str, Any] = {}
         self._logs: list[str] = []
+        self._trade_logs: list[str] = []
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
 
     def start(self):
@@ -46,6 +48,12 @@ class TradingEngine:
         self._logs.append(f"[{timestamp}] {message}")
         if len(self._logs) > 300:
             self._logs = self._logs[-300:]
+
+    def _append_trade_log(self, message: str):
+        timestamp = time.strftime("%H:%M:%S")
+        self._trade_logs.append(f"[{timestamp}] {message}")
+        if len(self._trade_logs) > 300:
+            self._trade_logs = self._trade_logs[-300:]
 
     def _process_orders(self):
         while True:
@@ -78,6 +86,7 @@ class TradingEngine:
                 self.bot.process_once()
                 snapshot = self.bot.get_dashboard_snapshot()
                 snapshot["logs"] = self._logs[-100:]
+                snapshot["trade_logs"] = self._trade_logs[-100:]
                 with self._snapshot_lock:
                     self._latest_snapshot = snapshot
             except Exception as e:
