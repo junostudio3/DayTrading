@@ -8,6 +8,10 @@ class TradeReporter:
     def add_buy_order(self, pdno: str, name:  str, quantity: int, price: int):
         text = f"매수 주문: [{pdno}] {name} / 수량: {quantity} / 가격: {price}"
         self._add_log(text)
+
+    def add_buy_order_cncelled(self, pdno: str, name:  str, text: str):
+        text = f"매수 주문 취소: [{pdno}] {name} / 사유: {text}"
+        self._add_log(text)
         
     def add_buy_order_completed(self, pdno: str, name:  str):
         text = f"매수 체결: [{pdno}] {name}"
@@ -19,6 +23,10 @@ class TradeReporter:
 
     def add_immediate_sell_order(self, pdno: str, name:  str, quantity: int, current_price: int):
         text = f"즉시 매도 주문: [{pdno}] {name} / 수량: {quantity} / 가격: 시장가 (모니터링된 가격: {current_price})"
+        self._add_log(text)
+
+    def add_sell_order_cancelled(self, pdno: str, name:  str, text: str):
+        text = f"매도 주문 취소: [{pdno}] {name} / 사유: {text}"
         self._add_log(text)
   
     def add_sell_order_completed(self, pdno: str, name:  str):

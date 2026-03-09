@@ -265,7 +265,7 @@ class DayTradingBot:
         ):
             try:
                 self.auth.order.cancel_order(state.buy_order_no)
-                self.log(f"[{pdno}] {name} 매수 주문 체결 대기가 5분을 초과해 주문을 취소합니다.")
+                self.trade_reporter.add_buy_order_cncelled(pdno, name, "체결 대기 시간 5분 초과")  # 매수 주문 취소 로그 추가
                 state.buy_order_no = ""
                 state.buy_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
@@ -331,7 +331,7 @@ class DayTradingBot:
         ):
             try:
                 self.auth.order.cancel_order(state.sell_order_no)
-                self.log(f"[{pdno}] {name} 매도 주문 체결 대기가 5분을 초과해 주문을 취소합니다.")
+                self.trade_reporter.add_sell_order_cancelled(pdno, name, "체결 대기 시간 5분 초과")  # 매도 주문 취소 로그 추가
                 state.sell_order_no = ""
                 state.sell_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP

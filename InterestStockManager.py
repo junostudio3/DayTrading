@@ -34,7 +34,7 @@ class InterestStockManager:
                         price = item.get("price", 0)
                         volume = item.get("volume", 0)
                         added_at = item.get("added_at", time.time())
-                        if self.is_avoided(pdno, prdt_name):
+                        if self.is_avoided(pdno, prdt_name, price, volume):
                             # 옛날에 저장된 항목 중 피해야 할 종목이 있을 수 있으므로 로드 시에도 체크한다
                             continue
                         self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, added_at))
@@ -77,20 +77,28 @@ class InterestStockManager:
         self.keep_7days = False
         self.save()
   
-    def is_avoided(self, pdno: str, name: str) -> bool:
+    def is_avoided(self, pdno: str, name: str, price: int = 0, volume: int = 0) -> bool:
         # 이름에 인버스 또는 레버가 포함된 종목은 피한다
         if "인버스" in name or "레버" in name:
             return True
+        
+        # 가격이 너무 큰 종목은 피한다 (하드코딩)
+        if price > 20000:
+            return True
+
+        # 가격이 너무 낮은 종목은 % 계산시 작은 값으로도 큰 변동이 발생할 수 있으므로 피한다 (하드코딩)
+        if price <= 4000:
+            return True
+
         return False
 
-    def update_stock(self, pdno: str, name: str, price: float, volume: int) -> bool:
-        if self.is_avoided(pdno, name):
-            return False
-        
+    def update_stock(self, pdno: str, name: str, price: int, volume: int) -> bool:
         existing = next((item for item in self.buy_list if item.stock.pdno == pdno), None)
 
-        if price <= 0 or price > 20000:
+        is_avoided = self.is_avoided(pdno, name, price, volume)
+        if is_avoided:
             if existing:
+                # 기존에 관심 종목으로 등록되어 있었지만 이제는 피해야 하는 종목이 되었으므로 목록에서 제거한다
                 self.buy_list.remove(existing)
                 self.save()
                 return True
