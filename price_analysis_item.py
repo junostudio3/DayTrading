@@ -3,14 +3,14 @@ import time
 import sqlite3
 from datetime import datetime
 from Candlestick import Candlestick
+from symbol_item import SymbolItem
 
 class PriceAnalysisItem:
-    def __init__(self, pdno, name, cache_dir):
-        self.pdno = pdno
-        self.name = name
+    def __init__(self, symbol_item: SymbolItem, cache_dir):
+        self.symbol_item = symbol_item
         self.candle_stick_5minute: list[Candlestick] = []
         # path to SQLite file for this pdno
-        self.db_path = os.path.join(cache_dir, f"{pdno}.db")
+        self.db_path = os.path.join(cache_dir, f"{self.symbol_item.pdno}.db")
         self._ensure_db()
         self._load_from_db()
 
@@ -140,8 +140,16 @@ class PriceAnalysisItem:
                 self._delete_candle(oldest.start_time)
             return True
         return False
+    
+    def is_purchase_overtime(self):
+        # 3시부터는 매도를 시작하므로 2시 50분부터는 구매 추천하지 않음
+        local_time = time.localtime()
+        return (local_time.tm_hour == 14 and local_time.tm_min >= 50) or (local_time.tm_hour >= 15)
         
     def is_purchase_recommended(self):
+        if self.is_purchase_overtime():
+            return False
+
         if not self._is_purchase_trend_recommended():
             return False
         if self._is_pullback_buy():

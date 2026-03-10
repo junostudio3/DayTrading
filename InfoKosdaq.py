@@ -205,7 +205,12 @@ def load_kosdaq_master(filepath: str = None) -> List[KosdaqCode]:
                 break
             if len(raw) < RECORD_SIZE:
                 break  # 불완전한 레코드 무시
-            records.append(_parse_record(raw[:RECORD_SIZE]))
+            record = _parse_record(raw[:RECORD_SIZE])
+            name = record.hts_kor_isnm
+            if "(A" in name or "(C" in name or "-e" in name or "공모주" in name:
+                    # 공모펀드 등은 제외한다
+                    continue
+            records.append(record)
 
     return records
 

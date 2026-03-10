@@ -1,6 +1,7 @@
 import os
 import time
-from PriceAnalysisItem import PriceAnalysisItem
+from price_analysis_item import PriceAnalysisItem
+from symbol_item import SymbolItem
 
 class PriceAnalysis:
     def __init__(self, cache_file):
@@ -25,7 +26,7 @@ class PriceAnalysis:
             if pdno in self.items:
                 # already loaded via migration
                 continue
-            item = PriceAnalysisItem(pdno, pdno, self.cache_dir)
+            item = PriceAnalysisItem(SymbolItem(pdno, pdno), self.cache_dir)
             self.items[pdno] = item
 
             # 만약 데이터가 1주일 이상 오래된 경우, 캐시에서 제거 및 SQLite 파일 삭제
@@ -38,11 +39,16 @@ class PriceAnalysis:
     def add_price(self, pdno, price, volume, stick_time: str) -> bool:
         is_changed = False
         if pdno not in self.items:
-            self.items[pdno] = PriceAnalysisItem(pdno, pdno, self.cache_dir)  # 이름은 심볼로 초기화
+            self.items[pdno] = PriceAnalysisItem(SymbolItem(pdno, pdno), self.cache_dir)  # 이름은 심볼로 초기화
             is_changed = True
         if self.items[pdno].add_price(price, volume, stick_time):
             is_changed = True
         return is_changed
+    
+    def is_purchase_overtime(self, pdno):
+        if pdno in self.items:
+            return self.items[pdno].is_purchase_overtime()
+        return False
 
     def is_purchase_recommended(self, pdno):
         if pdno in self.items:

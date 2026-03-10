@@ -4,7 +4,7 @@ import threading
 import time
 from typing import Any
 
-from DayTradingBot import DayTradingBot
+from day_trading_bot import DayTradingBot
 
 
 class TradingEngine:

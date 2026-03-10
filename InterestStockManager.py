@@ -2,12 +2,12 @@ import json
 import os
 import time
 from typing import List, Dict, Any
-from StockItem import StockItem
+from symbol_item import SymbolItem
 
 
 class InterestStockItem:
     def __init__(self, pdno: str, prdt_name: str, price: float, volume: int, added_at: float):
-        self.stock = StockItem(pdno, prdt_name)
+        self.stock = SymbolItem(pdno, prdt_name)
         self.price = price
         self.volume = volume
         self.added_at = added_at
@@ -17,7 +17,6 @@ class InterestStockManager:
     def __init__(self, cache_file_path: str = "./cache/interest_stocks.json"):
         self.cache_file_path = cache_file_path
         self.buy_list: List[InterestStockItem] = []
-        self.explore_index: int = 0
         self.keep_7days: bool = False
         self.load()
 
@@ -39,12 +38,10 @@ class InterestStockManager:
                             continue
                         self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, added_at))
 
-                    self.explore_index = data.get("explore_index", 0)
                     self.keep_7days = data.get("keep_7days", False)
             except Exception as e:
                 print(f"Failed to load interest stocks from {self.cache_file_path}: {e}")
                 self.buy_list = []
-                self.explore_index = 0
                 self.keep_7days = False
 
     def save(self):
@@ -63,7 +60,6 @@ class InterestStockManager:
                     }
                     for item in self.buy_list
                 ],
-                "explore_index": self.explore_index,
                 "keep_7days": self.keep_7days
             }
             with open(self.cache_file_path, "w", encoding="utf-8") as f:
@@ -73,7 +69,6 @@ class InterestStockManager:
 
     def clear(self):
         self.buy_list = []
-        self.explore_index = 0
         self.keep_7days = False
         self.save()
   
@@ -149,12 +144,5 @@ class InterestStockManager:
         self.keep_7days = True
         self.save()
 
-    def get_stocks(self) -> List[StockItem]:
+    def get_stocks(self) -> List[SymbolItem]:
         return [item.stock for item in self.buy_list]
-
-    def set_explore_index(self, index: int):
-        self.explore_index = index
-        self.save()
-
-    def get_explore_index(self) -> int:
-        return self.explore_index

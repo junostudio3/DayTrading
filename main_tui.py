@@ -1,4 +1,4 @@
-from DayTradingBot import DayTradingBot
+from day_trading_bot import DayTradingBot
 from TradingEngine import TradingEngine
 from DayTradingTUI import DayTradingTUI
 

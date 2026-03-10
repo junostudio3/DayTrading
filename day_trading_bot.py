@@ -6,13 +6,14 @@ from KisKey import app_key
 from KisKey import app_secret
 from InfoKosdaq import find_kosdaq_by_name, load_kosdaq_master
 from InfoKospi import find_kospi_by_name, load_kospi_master
-from PriceAnalysis import PriceAnalysis
+from price_analysis import PriceAnalysis
 from InterestStockManager import InterestStockManager
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
 from TradeStep import TradeStep
-from StockItem import StockItem
+from symbol_item import SymbolItem
+from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
 
 
 @dataclass
@@ -27,24 +28,32 @@ class DayTradingBot:
     ORDER_TIMEOUT_SECONDS = 60 * 5
 
     def __init__(self):
+        # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
+        self.log = print
+
         self.auth = KisAuth(app_key, app_secret, app_account, app_is_virtual, app_domain)
         self.auth.account.update()
 
+        self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
+
+        if self.interest_stock_manager.keep_7days is False:
+            # interest_stock_manager에 symbol_snapshot_cache를 주입한다.(임시)
+            for snap_shot in self.symbol_snapshot_cache.get_all_snapshots():
+                self.interest_stock_manager.update_stock(snap_shot.symbol.pdno, snap_shot.symbol.prdt_name, snap_shot.price, snap_shot.volume)
+
         self.loop_count = 0
         self.is_running = True
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
-        self.monitor_list: list[StockItem] = []
+        self.monitor_list: list[SymbolItem] = []
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
-        self.kosdq_records = load_kosdaq_master()
-        self.kospi_records = load_kospi_master()
-        self.all_records = self.kospi_records + self.kosdq_records
+        self.snapshot_collect_candidates: list[SymbolItem] = []
 
-        # print로 로그를 남기도록 한다.
-        self.log = print
+        self._update_snapshot_collect_candidates()
+
         self.update_sell_list()
 
         from TradeReporter import TradeReporter
@@ -65,7 +74,7 @@ class DayTradingBot:
             self.log("보유 주식이 없습니다.")
         else:
             for stock in self.auth.account.stocks:
-                self.log(f"종목번호: {stock['pdno']} {self._stock_name(stock)}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
+                self.log(f"종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
     def update_price(self, pdno: str, now: Optional[float] = None, force: bool = False, name: Optional[str] = None) -> Optional[float]:
         """단일 종목의 현재가 조회"""
@@ -118,6 +127,25 @@ class DayTradingBot:
                 print(f"관심 종목: [{pdno}] {name} / 현재가: {price} / 체결: {volume}")
         return price
 
+    def _update_snapshot_collect_candidates(self):
+        self.snapshot_collect_candidates: list[SymbolItem] = []
+        kosdq_records = load_kosdaq_master()
+        kospi_records = load_kospi_master()
+        all_records = kospi_records + kosdq_records
+
+        self.log(f"kospi와 kosdaq 항목을 조사하여 관심 종목 스냅샷 수집 후보 리스트를 업데이트합니다. (count={len(all_records)})")
+
+        for record in all_records:
+            pdno = getattr(record, 'mksc_shrn_iscd', '')
+            name = getattr(record, 'hts_kor_isnm', '')
+
+            if self.symbol_snapshot_cache.is_exists(pdno):
+                # 이미 캐시에 존재하는 심볼은 스냅샷 수집 후보에서 제외한다.
+                continue
+
+            stock_item = SymbolItem(pdno, name)
+            self.snapshot_collect_candidates.append(stock_item)
+
     def _stock_pdno(self, stock: Any) -> str:
         if isinstance(stock, dict):
             return stock.get('pdno', '')
@@ -143,22 +171,21 @@ class DayTradingBot:
         if current_time.tm_hour < 8 or (current_time.tm_hour == 16 and current_time.tm_min > 30) or current_time.tm_hour > 16:
             return
 
-        if not self.all_records:
+        if len(self.snapshot_collect_candidates) == 0:
+            # 한번씩은 모든 종목을 탐색했다.
+            # 모든 데이터가 symbol_snapshot_cache에 저장되어 있을 것이다
+            # 이제부터는 이것을 유지하고 가장 오래된 데이터부터만 하나씩 탐색한다.
+            self.interest_stock_manager.enable_keep_7days()
+            symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol()
+        else:
+            symbol_item = self.snapshot_collect_candidates.pop(0)
+
+        if symbol_item is None:
             return
 
-        explore_index = self.interest_stock_manager.get_explore_index()
-
-        # 한 번 호출 시 하나씩 조회 (인덱스 유지)
-        if explore_index >= len(self.all_records):
-            explore_index = 0
-            self.interest_stock_manager.enable_keep_7days()
-
-        record = self.all_records[explore_index]
-        pdno = self._stock_pdno(record)
-        name = self._stock_name(record)
+        pdno = symbol_item.pdno
+        name = symbol_item.prdt_name
         
-        self.interest_stock_manager.set_explore_index(explore_index + 1)
-
         if not pdno:
             return
         
@@ -191,8 +218,10 @@ class DayTradingBot:
             state.step = TradeStep.DECIDE_ON_SELL
             self.log(f"[{pdno}] {name} 보유 수량이 확인되어 매도 주문 단계로 이동합니다.")
             return
-        else:
+        
+        if self.price_analysis.is_purchase_overtime(pdno):
             # 보유 수량이 없는 경우 매수 주문 단계로 이동
+            # 단 3시부터는 매도를 시작하므로 2시 50분부터는 그냥 판단 단계에 머무르도록 한다.
             state.step = TradeStep.DECIDE_ON_PURCHASE
             self.log(f"[{pdno}] {name} 보유 수량이 없어서 매수 주문 단계로 이동합니다.")
             return
@@ -205,6 +234,11 @@ class DayTradingBot:
             # 다시 판단 단계로 이동한다.
             state.step = TradeStep.JUDGE_STEP
             self.log(f"[{pdno}] {name} 보유 수량이 확인되었으나 매수 주문 단계에 있어 판단 단계로 이동합니다.")
+            return
+
+        if self.price_analysis.is_purchase_overtime(pdno):
+            self.log(f"[{pdno}] {name} 현재 시간은 매수 추천이 종료된 시간입니다. 매수 주문 단계에서 판단 단계로 이동합니다.")
+            state.step = TradeStep.JUDGE_STEP
             return
 
         if self.price_analysis.is_purchase_recommended(pdno) is False:
@@ -273,7 +307,7 @@ class DayTradingBot:
                 self.log(f"[{pdno}] {name} 매수 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
 
-        if self.check_order_completed(pdno, state.buy_order_no, True):
+        if self.check_order_completed(pdno, name, state.buy_order_no, True):
             self.update_account_stock()
             self.interest_stock_manager.update_trade_date(pdno)
             state.buy_order_no = ""
@@ -339,7 +373,7 @@ class DayTradingBot:
                 self.log(f"[{pdno}] {name} 매도 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
 
-        if self.check_order_completed(pdno, state.sell_order_no, False):
+        if self.check_order_completed(pdno, name, state.sell_order_no, False):
             self.update_account_stock()
             self.interest_stock_manager.update_trade_date(pdno)
             state.sell_order_no = ""
@@ -390,9 +424,9 @@ class DayTradingBot:
     def _process_step(self, now: float):
         # 종목별 상태머신 동작
         processed_pdnos = set()
-        for stock in self.monitor_list:
-            pdno = stock.pdno
-            name = stock.prdt_name
+        for symbol_item in self.monitor_list:
+            pdno = symbol_item.pdno
+            name = symbol_item.prdt_name
             if not pdno:
                 continue
             if pdno in processed_pdnos:
@@ -489,8 +523,6 @@ class DayTradingBot:
         return {
             "market_open": self.is_market_open(),
             "loop_count": self.loop_count,
-            "explore_index": self.interest_stock_manager.get_explore_index(),
-            "max_count": len(self.all_records),
             "account": {
                 "cash": self.auth.account.dnca_tot_amt,
                 "d1": self.auth.account.nxdy_excc_amt,
@@ -549,7 +581,7 @@ class DayTradingBot:
         self.update_account_stock()
 
         # self.kosdq_monitor_list에 매도 리스트 업데이트
-        self.monitor_list: list[StockItem] = []
+        self.monitor_list: list[SymbolItem] = []
         monitor_pdnos = set()
         # 먼저 매수 리스트에 있는 종목들을 모니터링 리스트에 추가
         for stock in self.interest_stock_manager.get_stocks():
@@ -563,7 +595,7 @@ class DayTradingBot:
             pdno = stock.get('pdno', '')
             prdt_name = stock.get('prdt_name', '')
             if pdno and pdno not in monitor_pdnos:
-                self.monitor_list.append(StockItem(pdno, prdt_name))
+                self.monitor_list.append(SymbolItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
 
     def update_account_stock(self):
@@ -586,7 +618,7 @@ class DayTradingBot:
             self.log(f"매수 주문 실패: {e}")
             return None
 
-    def check_order_completed(self, pd_no: str, order_no: str, is_buy: bool):
+    def check_order_completed(self, pd_no: str, name: str, order_no: str, is_buy: bool):
         """매도/매수 주문 체결 여부 확인"""
         while True:
             try:
@@ -599,9 +631,9 @@ class DayTradingBot:
                 return True
             except Exception as e:
                 if is_buy:
-                    self.log(f"매수 주문 체결 확인 실패: {e}")
+                    self.log(f"[{pd_no} {name}] 매수 주문 체결 확인 실패\n{e}")
                 else:
-                    self.log(f"매도 주문 체결 확인 실패: {e}")
+                    self.log(f"[{pd_no} {name}] 매도 주문 체결 확인 실패\n{e}")
 
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
