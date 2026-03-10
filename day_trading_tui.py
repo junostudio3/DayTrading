@@ -9,7 +9,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Static, TabbedContent, TabPane
 
-from TradingEngine import TradingEngine
+from trading_engine import TradingEngine
 
 
 class OrderModal(ModalScreen[dict | None]):

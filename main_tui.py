@@ -1,6 +1,6 @@
 from day_trading_bot import DayTradingBot
-from TradingEngine import TradingEngine
-from DayTradingTUI import DayTradingTUI
+from trading_engine import TradingEngine
+from day_trading_tui import DayTradingTUI
 
 
 if __name__ == "__main__":

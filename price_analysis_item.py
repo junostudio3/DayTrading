@@ -2,7 +2,7 @@ import os
 import time
 import sqlite3
 from datetime import datetime
-from Candlestick import Candlestick
+from candlestick import Candlestick
 from symbol_item import SymbolItem
 
 class PriceAnalysisItem:
