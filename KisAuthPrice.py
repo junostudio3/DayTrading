@@ -1,6 +1,6 @@
+from candlestick import Candlestick
 from KisAuth import KisAuth
 import datetime
-import time
 
 class KisAuthPrice:
     def __init__(self, auth: KisAuth):
@@ -59,7 +59,7 @@ class KisAuthPrice:
         else:
             raise Exception(f"Failed to get previous day price and volume: {response.status_code} {response.text}")
 
-    def get_one_minute_candlestick(self, pdno: str, hour: int, minute: int, include_past_data: bool = False):
+    def get_one_minute_candlestick(self, pdno: str, hour: int, minute: int, include_past_data: bool = False) -> Candlestick:
         """1분봉 조회"""
 
         # fid_input_hour_1은 조회 시작 시간을 HHMMSS 형식으로 입력
@@ -82,7 +82,20 @@ class KisAuthPrice:
         if response.status_code == 200:
             data = response.json()
             if data.get("rt_cd") == "0" and "output2" in data and isinstance(data["output2"], list):
-                return data["output2"]
+                output = data["output2"]
+                if output is None or len(output) == 0:
+                    raise Exception(f"Failed to get candlestick data: data is empty")
+                price = output[0]["stck_prpr"]
+                low_price = output[0]["stck_lwpr"]
+                high_price = output[0]["stck_hgpr"]
+                volume = int(output[0]["cntg_vol"])
+                stick_time = output[0]["stck_cntg_hour"] # 봉이 시작된 시간 (HHMMSS)
+                candle = Candlestick(price, high_price, low_price, price, volume)
+                # 캔들 시간은 now를 이용해 오늘날짜를 얻은 다음 stick_time 결합
+                now = datetime.datetime.now()
+                candle.start_time = datetime.datetime.strptime(f"{now.strftime('%Y%m%d')}{stick_time}", "%Y%m%d%H%M%S").timestamp()
+                candle.end_time = candle.start_time
+                return candle
             raise Exception(f"Failed to get candlestick data: {data.get('msg_cd')} {data.get('msg1')}")
         else:
             raise Exception(f"Failed to get candlestick data: {response.status_code} {response.text}")

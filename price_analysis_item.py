@@ -3,12 +3,14 @@ import time
 import sqlite3
 from datetime import datetime
 from candlestick import Candlestick
+from candlestick import CandlestickMerger
 from common_structure import SymbolItem
 
 class PriceAnalysisItem:
     def __init__(self, symbol_item: SymbolItem, cache_dir):
         self.symbol_item = symbol_item
         self.candle_stick_5minute: list[Candlestick] = []
+        self.candle_merger = CandlestickMerger()
         # path to SQLite file for this pdno
         self.db_path = os.path.join(cache_dir, f"{self.symbol_item.pdno}.db")
         self._ensure_db()
@@ -85,61 +87,51 @@ class PriceAnalysisItem:
     def _get_5min_bucket(self, ts: float):
         return ts - (ts % 300)
 
-    def _timestamp_from_stick_time(self, stick_time: str) -> float:
-        if not stick_time:
-            return time.time()
-
-        try:
-            hhmmss = stick_time.strip()[:6]
-            hour = int(hhmmss[0:2])
-            minute = int(hhmmss[2:4])
-            second = int(hhmmss[4:6])
-            now = datetime.now()
-            tick_dt = now.replace(hour=hour, minute=minute, second=second, microsecond=0)
-            return tick_dt.timestamp()
-        except Exception:
-            return time.time()
-
-    def add_price(self, price, volume, stick_time: str) -> bool:
-        timestamp = self._timestamp_from_stick_time(stick_time)
-        bucket = self._get_5min_bucket(timestamp)
+    def add_price(self, one_candle : Candlestick) -> bool:
+        bucket = self._get_5min_bucket(one_candle.start_time)
 
         if not self.candle_stick_5minute:
             # 새로운 캔들스틱 생성
-            new_candle = Candlestick(price, price, price, price, volume)
-            new_candle.start_time = bucket
-            new_candle.end_time = bucket + 300
-            self.candle_stick_5minute.append(new_candle)
-            self._insert_candle(new_candle)
+            self._add_new_candle(one_candle, bucket)
             return True
 
         last_candle = self.candle_stick_5minute[-1]
 
         # 같은 5분 구간이면 업데이트
-        if last_candle.start_time == bucket:
-            changed = last_candle.close_price != price # 가격이 변경된 경우에만 True 반환
+        if not self.candle_stick_5minute or bucket > last_candle.start_time:
+            # 새로운 5분 구간이면 새 봉 생성
+            self._add_new_candle(one_candle, bucket)
+            return True
 
-            last_candle.close_price = price
-            last_candle.high_price = max(last_candle.high_price, price)
-            last_candle.low_price = min(last_candle.low_price, price)
-            last_candle.volume += volume
-            self._insert_candle(last_candle)
+        elif last_candle.start_time == bucket:
+            changed = last_candle.close_price != one_candle.close_price # 가격이 변경된 경우에만 True 반환
+
+            self.candle_merger.add_candle(one_candle)
+
+            merged_candle = self.candle_merger.get_merged_candle()
+            merged_candle.start_time = bucket
+
+            self.candle_stick_5minute[-1] = merged_candle
+            self._insert_candle(self.candle_stick_5minute[-1])
             return changed
 
-        # 새로운 5분 구간이면 새 봉 생성
-        elif bucket > last_candle.start_time:
-            new_candle = Candlestick(price, price, price, price, volume)
-            new_candle.start_time = bucket
-            new_candle.end_time = bucket + 300
-            self.candle_stick_5minute.append(new_candle)
-            self._insert_candle(new_candle)
-
-            # 메모리 관리
-            if len(self.candle_stick_5minute) > 200:
-                oldest = self.candle_stick_5minute.pop(0)
-                self._delete_candle(oldest.start_time)
-            return True
         return False
+
+    def _add_new_candle(self, new_candle: Candlestick, bucket: float):
+        self.candle_merger = CandlestickMerger()
+        self.candle_merger.add_candle(new_candle)
+
+        merged_candle = self.candle_merger.get_merged_candle()
+        merged_candle.start_time = bucket
+
+        self.candle_stick_5minute.append(merged_candle)
+        self._insert_candle(merged_candle)
+
+        # 메모리 관리
+        if len(self.candle_stick_5minute) > 200:
+            oldest = self.candle_stick_5minute.pop(0)
+            self._delete_candle(oldest.start_time)
+        return True
     
     def is_purchase_overtime(self):
         # 3시부터는 매도를 시작하므로 2시 50분부터는 구매 추천하지 않음

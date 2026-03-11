@@ -1,6 +1,7 @@
 import os
 import time
 from price_analysis_item import PriceAnalysisItem
+from candlestick import Candlestick
 from common_structure import SymbolItem
 
 class PriceAnalysis:
@@ -36,12 +37,12 @@ class PriceAnalysis:
                     del self.items[pdno]
                     os.remove(item.db_path)
 
-    def add_price(self, pdno, price, volume, stick_time: str) -> bool:
+    def add_price(self, symbol_item: SymbolItem, one_candle : Candlestick) -> bool:
         is_changed = False
-        if pdno not in self.items:
-            self.items[pdno] = PriceAnalysisItem(SymbolItem(pdno, pdno), self.cache_dir)  # 이름은 심볼로 초기화
+        if symbol_item.pdno not in self.items:
+            self.items[symbol_item.pdno] = PriceAnalysisItem(symbol_item, self.cache_dir)  # 이름은 심볼로 초기화
             is_changed = True
-        if self.items[pdno].add_price(price, volume, stick_time):
+        if self.items[symbol_item.pdno].add_price(one_candle):
             is_changed = True
         return is_changed
     

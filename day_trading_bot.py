@@ -77,14 +77,14 @@ class DayTradingBot:
             for stock in self.auth.account.stocks:
                 self.log(f"종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
-    def update_price(self, pdno: str, now: Optional[float] = None, force: bool = False, name: Optional[str] = None) -> Optional[float]:
+    def update_price(self, symbol_item: SymbolItem, now: Optional[float] = None, force: bool = False) -> Optional[float]:
         """단일 종목의 현재가 조회"""
         if now is None:
             now = time.time()
 
-        cached_item = self.price_analysis.items.get(pdno)
+        cached_item = self.price_analysis.items.get(symbol_item.pdno)
         if not force:
-            last_update_at = self.last_price_update_at.get(pdno, 0.0)
+            last_update_at = self.last_price_update_at.get(symbol_item.pdno, 0.0)
             if now - last_update_at < self.price_update_interval_sec:
                 if cached_item is not None and cached_item.candle_stick_5minute:
                     return cached_item.candle_stick_5minute[-1].close_price
@@ -95,7 +95,7 @@ class DayTradingBot:
                 current_time = time.localtime(now)
                 hour = current_time.tm_hour
                 minute = current_time.tm_min
-                candle = self.auth.price.get_one_minute_candlestick(pdno, hour, minute)
+                candle = self.auth.price.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
                 price = None
                 volume = None
                 stick_time = None
@@ -111,21 +111,17 @@ class DayTradingBot:
             except Exception as e:
                 error_count += 1
                 if error_count >= 5:
-                    self.log(f"Error fetching current price for {pdno} after 5 attempts: {e}")
+                    self.log(f"Error fetching current price for {symbol_item.pdno} after 5 attempts: {e}")
                     return None
 
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
-        self.last_price_update_at[pdno] = now
+        self.last_price_update_at[symbol_item.pdno] = now
 
-        if self.price_analysis.add_price(pdno, price, volume, stick_time):
+        if self.price_analysis.add_price(symbol_item, price, volume, stick_time):
             # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
-
-            if name is None:
-                print(f"[{pdno}] / 현재가: {price} / 거래량: {volume}")
-            else:
-                print(f"[{pdno}] {name} / 현재가: {price} / 거래량: {volume}")
+            print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {price} / 거래량: {volume}")
         return price
 
     def _update_snapshot_collect_candidates(self):
@@ -453,7 +449,7 @@ class DayTradingBot:
             state = self._get_trade_state(pdno)
 
             # 모든 step: 현재가 조회 및 분석(update_price)
-            self.update_price(pdno, now, name=name)
+            self.update_price(symbol_item, now)
             step = state.step
 
             if step == TradeStep.JUDGE_STEP:
