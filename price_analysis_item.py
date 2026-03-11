@@ -3,7 +3,7 @@ import time
 import sqlite3
 from datetime import datetime
 from candlestick import Candlestick
-from symbol_item import SymbolItem
+from common_structure import SymbolItem
 
 class PriceAnalysisItem:
     def __init__(self, symbol_item: SymbolItem, cache_dir):

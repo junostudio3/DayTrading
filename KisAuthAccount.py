@@ -1,4 +1,5 @@
 from KisAuth import KisAuth
+from common_structure import AccountBalance
 import requests
 
 
@@ -6,9 +7,7 @@ class KisAuthAccount:
     def __init__(self, auth: KisAuth, account):
         self.auth = auth
         self.account = account
-        self.dnca_tot_amt = 0  # 예수금
-        self.nxdy_excc_amt = 0  # D+1 예수금
-        self.prvs_rcdl_excc_amt = 0  # D+2 예수금
+        self.balance = AccountBalance()
         self.stocks = []  # 주식 잔고 정보
         self.stocks_by_pdno = {}  # {pdno: stock}
 
@@ -53,11 +52,11 @@ class KisAuthAccount:
                 if isinstance(output, list) and len(output) > 0:
                     item = output[0]  # 첫 번째 항목을 사용
                     if item.get("dnca_tot_amt") is not None:
-                        self.dnca_tot_amt = float(item.get("dnca_tot_amt", 0))
+                        self.balance.dnca_tot_amt = float(item.get("dnca_tot_amt", 0))
                     if item.get("nxdy_excc_amt") is not None:
-                        self.nxdy_excc_amt = float(item.get("nxdy_excc_amt", 0))
+                        self.balance.nxdy_excc_amt = float(item.get("nxdy_excc_amt", 0))
                     if item.get("prvs_rcdl_excc_amt") is not None:
-                        self.prvs_rcdl_excc_amt = float(item.get("prvs_rcdl_excc_amt", 0))
+                        self.balance.prvs_rcdl_excc_amt = float(item.get("prvs_rcdl_excc_amt", 0))
 
     def update_stock(self):
         """주식 잔고 정보 업데이트"""

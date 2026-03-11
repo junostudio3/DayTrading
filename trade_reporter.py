@@ -1,38 +1,51 @@
-from day_trading_bot import DayTradingBot
-from symbol_item import SymbolItem
+from common_structure import AccountBalance
+from common_structure import SymbolItem
 import time
+from enum import Enum, auto
+
+class TradeType(Enum):
+    BUY = auto()
+    BUY_CANCELLED = auto()
+    BUY_COMPLETED = auto()
+    SELL = auto()
+    IMMEDIATE_SELL = auto()
+    SELL_CANCELLED = auto()
+    SELL_COMPLETED = auto()
+
+    def get_kr_text(self):
+        if self == TradeType.BUY:
+            return "매수 주문"
+        elif self == TradeType.BUY_CANCELLED:
+            return "매수 주문 취소"
+        elif self == TradeType.BUY_COMPLETED:
+            return "매수 체결"
+        elif self == TradeType.SELL:
+            return "매도 주문"
+        elif self == TradeType.IMMEDIATE_SELL:
+            return "즉시 매도 주문"
+        elif self == TradeType.SELL_CANCELLED:
+            return "매도 주문 취소"
+        elif self == TradeType.SELL_COMPLETED:
+            return "매도 체결"
+        else:
+            return "알 수 없는 거래 유형"
+
 
 class TradeReporter:
-    def __init__(self, bot: DayTradingBot):
+    def __init__(self, bot):
         self.bot = bot
+        self.account_balance: AccountBalance = None
 
-    def add_buy_order(self, symbol_item: SymbolItem, quantity: int, price: int):
-        text = f"매수 주문 / 수량: {quantity} / 가격: {price}"
-        self._add_log(symbol_item, text)
+    def set_account_balance(self, account_balance: AccountBalance):
+        self.account_balance = account_balance
 
-    def add_buy_order_cncelled(self, symbol_item: SymbolItem, filled_quantity: int, text: str):
-        text = f"매수 주문 취소 / 이미 체결된 수량: {filled_quantity} / 사유: {text}"
-        self._add_log(symbol_item, text)
-        
-    def add_buy_order_completed(self, symbol_item: SymbolItem, quantity: int, price: int):
-        text = f"매수 체결 / 수량: {quantity} / 가격: {price}"
-        self._add_log(symbol_item, text)
-
-    def add_sell_order(self, symbol_item: SymbolItem, quantity: int, price: int):
-        text = f"매도 주문 / 수량: {quantity} / 가격: {price}"
-        self._add_log(symbol_item, text)
-
-    def add_immediate_sell_order(self, symbol_item: SymbolItem, quantity: int, current_price: int):
-        text = f"즉시 매도 주문 / 수량: {quantity} / 가격: 시장가 (모니터링된 가격: {current_price})"
-        self._add_log(symbol_item, text)
-
-    def add_sell_order_cancelled(self, symbol_item: SymbolItem, filled_quantity: int, text: str):
-        text = f"매도 주문 취소 / 이미 체결된 수량: {filled_quantity} / 사유: {text}"
-        self._add_log(symbol_item, text)
-  
-    def add_sell_order_completed(self, symbol_item: SymbolItem, quantity: int, price: int):
-        text = f"매도 체결 / 수량: {quantity} / 가격: {price}"
-        self._add_log(symbol_item, text)
+    def add(self, trade_type: TradeType, symbol_item: SymbolItem, quantity: int, price: int, text: str = ""):
+        log_text = trade_type.get_kr_text()
+        quantity_text = f"이미 체결된 수량: {quantity}" if trade_type in [TradeType.BUY_CANCELLED, TradeType.SELL_CANCELLED] else f"수량: {quantity}"
+        log_text = f"{log_text} / {quantity_text} / 가격: {price}"
+        if text:
+            log_text += f" / 사유: {text}"
+        self._add_log(symbol_item, log_text)
 
     def _add_log(self, symbol_item: SymbolItem, text: str):
         text = f"[{symbol_item.pdno} {symbol_item.prdt_name}] {text}"
@@ -48,7 +61,10 @@ class TradeReporter:
         try:
             with open(log_file_path, "a", encoding="utf-8") as f:
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-                f.write(f"[{timestamp}] {text}\n")
+                if self.account_balance is None:
+                    f.write(f"[{timestamp}] {text}\n")
+                else:
+                    f.write(f"[{timestamp}] [{self.account_balance.dnca_tot_amt} / D+1: {self.account_balance.nxdy_excc_amt} / D+2: {self.account_balance.prvs_rcdl_excc_amt}] / {text}\n")
         except Exception as e:
             print(f"Failed to write trade log to {log_file_path}: {e}")
 

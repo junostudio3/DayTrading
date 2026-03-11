@@ -14,8 +14,9 @@ from dataclasses import dataclass
 from typing import Optional
 from typing import List
 from trade_step import TradeStep
-from symbol_item import SymbolItem
+from common_structure import SymbolItem
 from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
+from trade_reporter import TradeReporter, TradeType
 
 
 @dataclass
@@ -25,6 +26,7 @@ class TradeState:
     sell_order_no: str = ""
     buy_order_requested_at: float = 0.0
     sell_order_requested_at: float = 0.0
+
 
 class DayTradingBot:
     ORDER_TIMEOUT_SECONDS = 60 * 5
@@ -53,13 +55,10 @@ class DayTradingBot:
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
         self.snapshot_collect_candidates: list[SymbolItem] = []
+        self.trade_reporter = TradeReporter(self)
 
         self._update_snapshot_collect_candidates()
-
         self.update_sell_list()
-
-        from trade_reporter import TradeReporter
-        self.trade_reporter = TradeReporter(self)
 
     def run(self):
         self.display_account_info()
@@ -68,9 +67,9 @@ class DayTradingBot:
             time.sleep(1)
 
     def display_account_info(self):
-        self.log(f"예수금: {self.auth.account.dnca_tot_amt}")
-        self.log(f"D+1 예수금: {self.auth.account.nxdy_excc_amt}")
-        self.log(f"D+2 예수금: {self.auth.account.prvs_rcdl_excc_amt}")
+        self.log(f"예수금: {self.auth.account.balance.dnca_tot_amt}")
+        self.log(f"D+1 예수금: {self.auth.account.balance.nxdy_excc_amt}")
+        self.log(f"D+2 예수금: {self.auth.account.balance.prvs_rcdl_excc_amt}")
         self.log("주식 잔고:")
         if not self.auth.account.stocks:
             self.log("보유 주식이 없습니다.")
@@ -280,7 +279,8 @@ class DayTradingBot:
 
         order_no = order.get("ODNO", "")
 
-        self.trade_reporter.add_buy_order(symbol_item, order_quantity, current_price)  
+
+        self.trade_reporter.add(TradeType.BUY, symbol_item, order_quantity, current_price)  
         state.buy_order_no = order_no
         state.buy_order_requested_at = time.time()
         state.step = TradeStep.WAIT_ACCEPT_PURCHASE
@@ -303,7 +303,7 @@ class DayTradingBot:
                 # 매수 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
                 filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
 
-                self.trade_reporter.add_buy_order_cncelled(symbol_item, filled_quantity, "체결 대기 시간 5분 초과")  # 매수 주문 취소 로그 추가
+                self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, "체결 대기 시간 5분 초과")  # 매수 주문 취소 로그 추가
                 state.buy_order_no = ""
                 state.buy_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
@@ -319,7 +319,7 @@ class DayTradingBot:
             self.interest_stock_manager.update_trade_date(pdno)
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
-            self.trade_reporter.add_buy_order_completed(symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매수 체결 로그 추가
+            self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매수 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_SELL
 
     def _process_order_sell(self, symbol_item: SymbolItem):
@@ -342,7 +342,7 @@ class DayTradingBot:
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
             self._symbol_log(symbol_item, f"손절 추천: 구매가: {purchase_price} / 현재가: {current_price}")
-            self.trade_reporter.add_immediate_sell_order(symbol_item, quantity, current_price)  # 가격이 0인 것은 시장가 주문을 의미한다.
+            self.trade_reporter.add(TradeType.IMMEDIATE_SELL, symbol_item, quantity, current_price)  # 즉시 매도 주문 로그 추가
             state.step = TradeStep.WAIT_ACCEPT_SELL
             return
 
@@ -354,7 +354,7 @@ class DayTradingBot:
 
         current_price = int(self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
         order = self.sell(symbol_item, quantity, current_price)
-        self.trade_reporter.add_sell_order(symbol_item, quantity, current_price)
+        self.trade_reporter.add(TradeType.SELL, symbol_item, quantity, current_price)
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
         state.step = TradeStep.WAIT_ACCEPT_SELL
@@ -377,7 +377,7 @@ class DayTradingBot:
                 # 매도 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
                 filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno) * -1 # 매도 주문이므로 보유 수량에서 빠져나가는 것이어서 음수로 계산
 
-                self.trade_reporter.add_sell_order_cancelled(symbol_item, filled_quantity, "체결 대기 시간 5분 초과")  # 매도 주문 취소 로그 추가
+                self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, "체결 대기 시간 5분 초과")  # 매도 주문 취소 로그 추가
                 state.sell_order_no = ""
                 state.sell_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
@@ -394,7 +394,7 @@ class DayTradingBot:
             self.interest_stock_manager.update_trade_date(pdno)
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
-            self.trade_reporter.add_sell_order_completed(symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
+            self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_PURCHASE
             
 
@@ -541,9 +541,9 @@ class DayTradingBot:
             "market_open": self.is_market_open(),
             "loop_count": self.loop_count,
             "account": {
-                "cash": self.auth.account.dnca_tot_amt,
-                "d1": self.auth.account.nxdy_excc_amt,
-                "d2": self.auth.account.prvs_rcdl_excc_amt,
+                "cash": self.auth.account.balance.dnca_tot_amt,
+                "d1": self.auth.account.balance.nxdy_excc_amt,
+                "d2": self.auth.account.balance.prvs_rcdl_excc_amt,
             },
             "watch": watch_rows,
             "holdings": holdings_rows,
@@ -630,7 +630,7 @@ class DayTradingBot:
                 time.sleep(1)  # 잠시 대기 후 재시도
                 try_count += 1
         
-        # 
+        self.trade_reporter.set_account_balance(self.auth.account.balance)
 
     def buy(self, symbol_item: SymbolItem, quantity: int, price: int):
         """현금 매수 주문"""

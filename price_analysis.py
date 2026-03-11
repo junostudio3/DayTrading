@@ -1,7 +1,7 @@
 import os
 import time
 from price_analysis_item import PriceAnalysisItem
-from symbol_item import SymbolItem
+from common_structure import SymbolItem
 
 class PriceAnalysis:
     def __init__(self, cache_file):

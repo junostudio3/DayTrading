@@ -1,8 +1,8 @@
 import json
 import os
 import time
-from typing import List, Dict, Any
-from symbol_item import SymbolItem
+from typing import List
+from common_structure import SymbolItem
 
 
 class InterestStockItem:

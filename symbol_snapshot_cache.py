@@ -1,4 +1,4 @@
-from symbol_item import SymbolItem
+from common_structure import SymbolItem
 
 
 # SymbolSnapshot
