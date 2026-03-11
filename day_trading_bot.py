@@ -1,4 +1,5 @@
 from KisAuth import KisAuth
+from KisAuthOrder import OrderCheckResult
 from KisKey import app_account
 from KisKey import app_domain
 from KisKey import app_is_virtual
@@ -10,7 +11,8 @@ from price_analysis import PriceAnalysis
 from InterestStockManager import InterestStockManager
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
+from typing import List
 from trade_step import TradeStep
 from symbol_item import SymbolItem
 from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
@@ -122,9 +124,9 @@ class DayTradingBot:
             # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
 
             if name is None:
-                print(f"관심 종목: [{pdno}] / 현재가: {price} / 체결: {volume}")
+                print(f"[{pdno}] / 현재가: {price} / 거래량: {volume}")
             else:
-                print(f"관심 종목: [{pdno}] {name} / 현재가: {price} / 체결: {volume}")
+                print(f"[{pdno}] {name} / 현재가: {price} / 거래량: {volume}")
         return price
 
     def _update_snapshot_collect_candidates(self):
@@ -298,6 +300,7 @@ class DayTradingBot:
         ):
             try:
                 self.auth.order.cancel_order(state.buy_order_no)
+                # 매수 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
                 filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
 
                 self.trade_reporter.add_buy_order_cncelled(symbol_item, filled_quantity, "체결 대기 시간 5분 초과")  # 매수 주문 취소 로그 추가
@@ -308,13 +311,15 @@ class DayTradingBot:
                 self._symbol_log(symbol_item, f"매수 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
 
-        if self.check_order_completed(symbol_item, state.buy_order_no, True):
-            filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
+        check_order_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
 
+        if check_order_result.rmn_qty == 0:
+            # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
+            self.update_account_stock()
             self.interest_stock_manager.update_trade_date(pdno)
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
-            self.trade_reporter.add_buy_order_completed(symbol_item, filled_quantity)  # 매수 체결 로그 추가
+            self.trade_reporter.add_buy_order_completed(symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매수 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_SELL
 
     def _process_order_sell(self, symbol_item: SymbolItem):
@@ -332,7 +337,7 @@ class DayTradingBot:
         quantity = int(inventory['hldg_qty'])
 
         if self.price_analysis.is_sell_stop_loss_recommended(pdno, purchase_price):
-            current_price = self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price if pdno in self.price_analysis.items and self.price_analysis.items[pdno].candle_stick_5minute else 0
+            current_price = int(self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price) if pdno in self.price_analysis.items and self.price_analysis.items[pdno].candle_stick_5minute else 0
             order = self.immediately_sell(symbol_item, quantity)
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
@@ -369,6 +374,7 @@ class DayTradingBot:
         ):
             try:
                 self.auth.order.cancel_order(state.sell_order_no)
+                # 매도 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
                 filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno) * -1 # 매도 주문이므로 보유 수량에서 빠져나가는 것이어서 음수로 계산
 
                 self.trade_reporter.add_sell_order_cancelled(symbol_item, filled_quantity, "체결 대기 시간 5분 초과")  # 매도 주문 취소 로그 추가
@@ -378,14 +384,17 @@ class DayTradingBot:
             except Exception as e:
                 self._symbol_log(symbol_item, f"매도 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
+        
+        check_order_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
 
-        if self.check_order_completed(symbol_item, state.sell_order_no, False):
-            filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno) * -1 # 매도 주문이므로 보유 수량에서 빠져나가는 것이어서 음수로 계산
+        if check_order_result.rmn_qty == 0:
+            # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
+            self.update_account_stock()
 
             self.interest_stock_manager.update_trade_date(pdno)
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
-            self.trade_reporter.add_sell_order_completed(symbol_item, filled_quantity)  # 매도 체결 로그 추가
+            self.trade_reporter.add_sell_order_completed(symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_PURCHASE
             
 
@@ -589,25 +598,24 @@ class DayTradingBot:
         # self.kosdq_monitor_list에 매도 리스트 업데이트
         self.monitor_list: list[SymbolItem] = []
         monitor_pdnos = set()
-        # 먼저 매수 리스트에 있는 종목들을 모니터링 리스트에 추가
+
+        # 먼저 관심종목들을 모니터링 리스트에 추가
         for stock in self.interest_stock_manager.get_stocks():
             self.monitor_list.append(stock)
-            pdno = stock.pdno
-            if pdno:
-                monitor_pdnos.add(pdno)
+            monitor_pdnos.add(stock.pdno)
 
         # 재고로 가지고 있는 건 모두 모니터링 리스트에 추가
         for stock in self.auth.account.stocks:
             pdno = stock.get('pdno', '')
             prdt_name = stock.get('prdt_name', '')
-            if pdno and pdno not in monitor_pdnos:
+            if pdno not in monitor_pdnos:
                 self.monitor_list.append(SymbolItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
 
     def update_account_stock_and_get_diff_quantity(self, pdno: str) -> int:
-        old_quantity = self._find_inventory(pdno)['hldg_qty'] if self._find_inventory(pdno) else 0
+        old_quantity = int(self._find_inventory(pdno)['hldg_qty']) if self._find_inventory(pdno) else 0
         self.update_account_stock()
-        new_quantity = self._find_inventory(pdno)['hldg_qty'] if self._find_inventory(pdno) else 0
+        new_quantity = int(self._find_inventory(pdno)['hldg_qty']) if self._find_inventory(pdno) else 0
         return new_quantity - old_quantity
 
     def update_account_stock(self):
@@ -621,6 +629,8 @@ class DayTradingBot:
                     self.log(f"계좌 정보 업데이트 실패: {e}")
                 time.sleep(1)  # 잠시 대기 후 재시도
                 try_count += 1
+        
+        # 
 
     def buy(self, symbol_item: SymbolItem, quantity: int, price: int):
         """현금 매수 주문"""
@@ -630,25 +640,34 @@ class DayTradingBot:
             self._symbol_log(symbol_item, f"매수 주문 실패\n{e}")
             return None
 
-    def check_order_completed(self, symbol_item: SymbolItem, order_no: str, is_buy: bool):
+    def check_order_completed(self, symbol_item: SymbolItem, order_no: str, is_buy: bool) -> OrderCheckResult:
         """매도/매수 주문 체결 여부 확인"""
         pd_no = symbol_item.pdno
+        try_count = 0
+
         while True:
             try:
-                check_list = self.auth.order.order_check(pd_no, order_no, is_buy)
+                check_list: List[OrderCheckResult] = self.auth.order.order_check(pd_no, order_no, is_buy)
+
+                total_check_result = OrderCheckResult()
 
                 for check in check_list:
-                    if check.get("rmn_qty", "0") != "0":
+                    if check.rmn_qty != 0:
                         # 잔여수량 0이 아니면 체결 안된 것으로 간주
                         return False
-                return True
+                    
+                    total_check_result.add(check)
+
+                return total_check_result
             except Exception as e:
-                if is_buy:
-                    self._symbol_log(symbol_item, f"매수 주문 체결 확인 실패\n{e}")
-                else:
-                    self._symbol_log(symbol_item, f"매도 주문 체결 확인 실패\n{e}")
+                if try_count >= 5:
+                    if is_buy:
+                        self._symbol_log(symbol_item, f"매수 주문 체결 확인 실패\n{e}")
+                    else:
+                        self._symbol_log(symbol_item, f"매도 주문 체결 확인 실패\n{e}")
 
                 time.sleep(1)  # 잠시 대기 후 재시도
+                try_count += 1
                 continue
 
     def sell(self, symbol_item: SymbolItem, quantity: int, price: int):
@@ -665,9 +684,7 @@ class DayTradingBot:
         """즉시 매도 주문 (시장가)"""
         while True:
             try:
-                result = self.auth.order.immediately_sell(symbol_item.pdno, quantity)
-                self.update_sell_list()
-                return result
+                return self.auth.order.immediately_sell(symbol_item.pdno, quantity)
             except Exception as e:
                 self._symbol_log(symbol_item, f"즉시 매도 주문 실패\n{e}")
                 time.sleep(1)  # 잠시 대기 후 재시도

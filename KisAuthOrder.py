@@ -1,10 +1,26 @@
 from KisAuth import KisAuth
 import enum
 import datetime
+from typing import List, Optional
+
 
 class OrderDivision(enum.Enum):
     SETTLE = "00"  # 지정가
     MARKET = "10"  # 시장가
+
+
+class OrderCheckResult:
+    def __init__(self):
+        self.ord_unpr = 0  # 주문 가격
+        self.rmn_qty = 0  # 잔량
+        self.tot_ccld_qty = 0  # 총 체결 수량
+
+    def add(self, other):
+        if self.ord_unpr != other.ord_unpr:
+            raise ValueError("주문 가격이 다릅니다.")
+
+        self.rmn_qty += other.rmn_qty
+        self.tot_ccld_qty += other.tot_ccld_qty
 
 class KisAuthOrder:
     def __init__(self, auth: KisAuth):
@@ -25,7 +41,7 @@ class KisAuthOrder:
         return self.order_cash(pdno, quantity, price=0, is_buy=False, division=OrderDivision.MARKET)
     
     # 매수/매도 체결 확인
-    def order_check(self, pd_no: str, order_no: str, is_buy: bool):
+    def order_check(self, pd_no: str, order_no: str, is_buy: bool) -> List[OrderCheckResult]:
         """주문 체결 확인"""
 
         tr_id = "VTTC0081R" if self.auth.is_virtual else "TTTC0081R"
@@ -55,7 +71,14 @@ class KisAuthOrder:
         if response.status_code == 200:
             data = response.json()
             if data.get("rt_cd") == "0" and "output1" in data:
-                return data["output1"]
+                results = []
+                for item in data["output1"]:
+                    result = OrderCheckResult()
+                    result.ord_unpr = int(item.get("ord_unpr", 0))
+                    result.rmn_qty = int(item.get("rmn_qty", 0))
+                    result.tot_ccld_qty = int(item.get("tot_ccld_qty", 0))
+                    results.append(result)
+                return results
 
         raise Exception(f"Failed to check order: {response.status_code} {response.text}")
     
