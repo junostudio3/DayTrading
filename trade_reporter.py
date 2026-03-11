@@ -10,12 +10,12 @@ class TradeReporter:
         text = f"매수 주문 / 수량: {quantity} / 가격: {price}"
         self._add_log(symbol_item, text)
 
-    def add_buy_order_cncelled(self, symbol_item: SymbolItem, text: str):
-        text = f"매수 주문 취소 / 사유: {text}"
+    def add_buy_order_cncelled(self, symbol_item: SymbolItem, filled_quantity: int, text: str):
+        text = f"매수 주문 취소 / 이미 체결된 수량: {filled_quantity} / 사유: {text}"
         self._add_log(symbol_item, text)
         
-    def add_buy_order_completed(self, symbol_item: SymbolItem):
-        text = f"[매수 체결"
+    def add_buy_order_completed(self, symbol_item: SymbolItem, filled_quantity: int):
+        text = f"매수 체결 / 체결된 수량: {filled_quantity}"
         self._add_log(symbol_item, text)
 
     def add_sell_order(self, symbol_item: SymbolItem, quantity: int, price: int):
@@ -26,12 +26,12 @@ class TradeReporter:
         text = f"즉시 매도 주문 / 수량: {quantity} / 가격: 시장가 (모니터링된 가격: {current_price})"
         self._add_log(symbol_item, text)
 
-    def add_sell_order_cancelled(self, symbol_item: SymbolItem, text: str):
-        text = f"매도 주문 취소 / 사유: {text}"
+    def add_sell_order_cancelled(self, symbol_item: SymbolItem, filled_quantity: int, text: str):
+        text = f"매도 주문 취소 / 이미 체결된 수량: {filled_quantity} / 사유: {text}"
         self._add_log(symbol_item, text)
   
-    def add_sell_order_completed(self, symbol_item: SymbolItem):
-        text = f"매도 체결"
+    def add_sell_order_completed(self, symbol_item: SymbolItem, filled_quantity: int):
+        text = f"매도 체결 / 체결된 수량: {filled_quantity}"
         self._add_log(symbol_item, text)
 
     def _add_log(self, symbol_item: SymbolItem, text: str):

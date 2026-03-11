@@ -298,7 +298,9 @@ class DayTradingBot:
         ):
             try:
                 self.auth.order.cancel_order(state.buy_order_no)
-                self.trade_reporter.add_buy_order_cncelled(symbol_item, "체결 대기 시간 5분 초과")  # 매수 주문 취소 로그 추가
+                filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
+
+                self.trade_reporter.add_buy_order_cncelled(symbol_item, filled_quantity, "체결 대기 시간 5분 초과")  # 매수 주문 취소 로그 추가
                 state.buy_order_no = ""
                 state.buy_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
@@ -307,11 +309,12 @@ class DayTradingBot:
             return
 
         if self.check_order_completed(symbol_item, state.buy_order_no, True):
-            self.update_account_stock()
+            filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
+
             self.interest_stock_manager.update_trade_date(pdno)
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
-            self.trade_reporter.add_buy_order_completed(symbol_item)  # 매수 체결 로그 추가
+            self.trade_reporter.add_buy_order_completed(symbol_item, filled_quantity)  # 매수 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_SELL
 
     def _process_order_sell(self, symbol_item: SymbolItem):
@@ -345,7 +348,7 @@ class DayTradingBot:
             return
 
         current_price = int(self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
-        order = self.sell(pdno, quantity, current_price)
+        order = self.sell(symbol_item, quantity, current_price)
         self.trade_reporter.add_sell_order(symbol_item, quantity, current_price)
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
@@ -366,7 +369,9 @@ class DayTradingBot:
         ):
             try:
                 self.auth.order.cancel_order(state.sell_order_no)
-                self.trade_reporter.add_sell_order_cancelled(symbol_item, "체결 대기 시간 5분 초과")  # 매도 주문 취소 로그 추가
+                filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno) * -1 # 매도 주문이므로 보유 수량에서 빠져나가는 것이어서 음수로 계산
+
+                self.trade_reporter.add_sell_order_cancelled(symbol_item, filled_quantity, "체결 대기 시간 5분 초과")  # 매도 주문 취소 로그 추가
                 state.sell_order_no = ""
                 state.sell_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
@@ -375,12 +380,14 @@ class DayTradingBot:
             return
 
         if self.check_order_completed(symbol_item, state.sell_order_no, False):
-            self.update_account_stock()
+            filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno) * -1 # 매도 주문이므로 보유 수량에서 빠져나가는 것이어서 음수로 계산
+
             self.interest_stock_manager.update_trade_date(pdno)
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
-            self.trade_reporter.add_sell_order_completed(symbol_item)  # 매도 체결 로그 추가
+            self.trade_reporter.add_sell_order_completed(symbol_item, filled_quantity)  # 매도 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_PURCHASE
+            
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:
@@ -596,6 +603,12 @@ class DayTradingBot:
             if pdno and pdno not in monitor_pdnos:
                 self.monitor_list.append(SymbolItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
+
+    def update_account_stock_and_get_diff_quantity(self, pdno: str) -> int:
+        old_quantity = self._find_inventory(pdno)['hldg_qty'] if self._find_inventory(pdno) else 0
+        self.update_account_stock()
+        new_quantity = self._find_inventory(pdno)['hldg_qty'] if self._find_inventory(pdno) else 0
+        return new_quantity - old_quantity
 
     def update_account_stock(self):
         try_count = 0
