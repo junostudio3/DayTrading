@@ -161,6 +161,7 @@ class DayTradingTUI(App):
 
     def _render_holdings(self, rows: list[dict]):
         table = self.query_one("#holdings", DataTable)
+        current_row = table.cursor_row
         table.clear()
         self._holding_pdnos = []
         for row in rows:
@@ -177,9 +178,12 @@ class DayTradingTUI(App):
                 "-" if current is None else f"{current:,.0f}",
                 "-" if profit_rate is None else f"{profit_rate:.2f}%",
             )
+        if rows and current_row >= 0:
+            table.move_cursor(row=min(current_row, len(rows) - 1))
 
     def _render_watch(self, rows: list[dict]):
         table = self.query_one("#watch", DataTable)
+        current_row = table.cursor_row
         table.clear()
         self._watch_pdnos = []
         for row in rows:
@@ -196,6 +200,8 @@ class DayTradingTUI(App):
                 f"{row.get('volume', 0):,}",
                 step
             )
+        if rows and current_row >= 0:
+            table.move_cursor(row=min(current_row, len(rows) - 1))
 
     def _render_logs(self, widget_id: str, logs: list[str]):
         log_widget = self.query_one(f"#{widget_id}", RichLog)
