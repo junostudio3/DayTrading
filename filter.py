@@ -26,5 +26,11 @@ class SymbolFilter:
         
         if name.startswith("ARIRANG "):
             return True
+        
+        # 1호,2호,3호,4호,5호의 이름이 포함된 종목도 피한다
+        # 이런 종목들은 보통 공모펀드나 리츠 등으로 단타에 적합하지 않다
+        for i in range(1, 6):
+            if f"{i}호" in name:
+                return True
 
         return False
