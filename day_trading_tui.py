@@ -63,7 +63,22 @@ class DayTradingTUI(App):
         height: 1fr;
     }
 
-    #holdings, #watch {
+    #left-tabs {
+        width: 1fr;
+        height: 1fr;
+        border: solid #666666;
+    }
+
+    #left-tabs > TabPane {
+        padding: 0;
+    }
+
+    #holdings, #graph {
+        width: 1fr;
+        height: 1fr;
+    }
+    
+    #watch {
         width: 1fr;
         border: solid #666666;
     }
@@ -107,7 +122,11 @@ class DayTradingTUI(App):
         yield Header(show_clock=True)
         yield Static("로딩 중...", id="summary")
         with Horizontal(id="tables"):
-            yield DataTable(id="holdings")
+            with TabbedContent(initial="holdings-pane", id="left-tabs"):
+                with TabPane("보유주식", id="holdings-pane"):
+                    yield DataTable(id="holdings")
+                with TabPane("그래프", id="graph-pane"):
+                    yield Static("", id="graph")
             yield DataTable(id="watch")
         with TabbedContent(initial="trade-logs-pane", id="log-tabs"):
             with TabPane("거래 로그", id="trade-logs-pane", classes="log-pane"):
@@ -156,6 +175,7 @@ class DayTradingTUI(App):
 
         self._render_holdings(snapshot.get("holdings", []))
         self._render_watch(snapshot.get("watch", []))
+        self._render_graph()
         self._render_logs("logs", snapshot.get("logs", []))
         self._render_logs("trade-logs", snapshot.get("trade_logs", []))
 
@@ -202,6 +222,67 @@ class DayTradingTUI(App):
             )
         if rows and current_row >= 0:
             table.move_cursor(row=min(current_row, len(rows) - 1))
+
+    def _render_graph(self):
+        graph = self.query_one("#graph", Static)
+        
+        watch_table = self.query_one("#watch", DataTable)
+        if not self._watch_pdnos:
+            return
+            
+        row_idx = watch_table.cursor_row
+        if 0 <= row_idx < len(self._watch_pdnos):
+            pdno = self._watch_pdnos[row_idx]
+        else:
+            pdno = self._watch_pdnos[0]
+            
+        c_list = []
+        try:
+            items = self.engine.bot.price_analysis.items
+            if pdno in items:
+                # 5분봉 리스트 가져오기
+                c_list = items[pdno].candle_stick_5minute
+        except Exception:
+            pass
+            
+        if not c_list:
+            graph.update("데이터가 없습니다.")
+            return
+
+        from datetime import datetime
+        import plotext as plt
+
+        # 최근 50개 캔들만 표시
+        recent_candles = c_list[-50:]
+        
+        dates = [datetime.fromtimestamp(c.end_time).strftime('%d/%m/%Y %H:%M:%S') if c.end_time else "" for c in recent_candles]
+        
+        prices = {
+            "Open": [c.open_price for c in recent_candles],
+            "High": [c.high_price for c in recent_candles],
+            "Low": [c.low_price for c in recent_candles],
+            "Close": [c.close_price for c in recent_candles],
+        }
+        
+        plt.clf()
+        plt.theme("dark")
+        # Plotext에 사용할 시간 형식 지정 (clf 후에 호출해야 함)
+        plt.date_form('d/m/Y H:M:S')
+        
+        try:
+            # widget 크기에 맞춰 그리기 시도
+            width, height = graph.size
+            plt.plotsize(max(10, width), max(5, height - 2))
+        except Exception:
+            plt.plotsize(80, 20)
+
+        plt.candlestick(dates, prices)
+        plt.title(f"{pdno} 5분봉 차트")
+        
+        # Plotext의 결과를 ANSI 문자열로 추출하여 업데이트
+        from rich.text import Text
+        ansi_str = plt.build()
+        graph.update(Text.from_ansi(ansi_str))
 
     def _render_logs(self, widget_id: str, logs: list[str]):
         log_widget = self.query_one(f"#{widget_id}", RichLog)
