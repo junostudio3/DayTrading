@@ -1,6 +1,7 @@
 import json
 import os
 import time
+from filter import SymbolFilter
 from typing import List
 from common_structure import SymbolItem
 
@@ -19,6 +20,7 @@ class InterestStockManager:
         self.buy_list: List[InterestStockItem] = []
         self.keep_7days: bool = False
         self.load()
+        self.keep_7days = False # 임시
 
     def load(self):
         if os.path.exists(self.cache_file_path):
@@ -73,8 +75,7 @@ class InterestStockManager:
         self.save()
   
     def is_avoided(self, pdno: str, name: str, price: int = 0, volume: int = 0) -> bool:
-        # 이름에 인버스 또는 레버가 포함된 종목은 피한다
-        if "인버스" in name or "레버" in name:
+        if SymbolFilter.is_not_interested(name):
             return True
         
         # 가격이 너무 큰 종목은 피한다 (하드코딩)
@@ -141,8 +142,10 @@ class InterestStockManager:
             self.save()
 
     def enable_keep_7days(self):
-        self.keep_7days = True
-        self.save()
+        # 임시로 해당 기능 끔
+        #self.keep_7days = True
+        #self.save()
+        pass
 
     def get_stocks(self) -> List[SymbolItem]:
         return [item.stock for item in self.buy_list]

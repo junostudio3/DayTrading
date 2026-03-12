@@ -7,6 +7,7 @@ KOSDAQ 종목 마스터 파일(kosdaq_code.mst) 파서
 import os
 from dataclasses import dataclass, field
 from typing import List, Optional
+from filter import SymbolFilter
 
 # ──────────────────────────────────────────────
 # 필드 정의 (이름, 바이트 길이)
@@ -207,9 +208,8 @@ def load_kosdaq_master(filepath: str = None) -> List[KosdaqCode]:
                 break  # 불완전한 레코드 무시
             record = _parse_record(raw[:RECORD_SIZE])
             name = record.hts_kor_isnm
-            if "(A" in name or "(C" in name or "-e" in name or "공모주" in name:
-                    # 공모펀드 등은 제외한다
-                    continue
+            if SymbolFilter.is_not_interested(name):
+                continue
             records.append(record)
 
     return records

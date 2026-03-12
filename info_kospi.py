@@ -6,6 +6,7 @@ KOSPI 종목 마스터 파일(kospi_code.mst) 파서
 
 import os
 from dataclasses import dataclass
+from filter import SymbolFilter
 from typing import List, Optional
 
 # ──────────────────────────────────────────────
@@ -213,8 +214,7 @@ def load_kospi_master(filepath: str = None) -> List[KospiCode]:
 							break
 					record = _parse_record(raw[:RECORD_SIZE])
 					name = record.hts_kor_isnm
-					if "(A" in name or "(C" in name or "-e" in name or "공모주" in name:
-							# 공모펀드 등은 제외한다
+					if SymbolFilter.is_not_interested(name):
 							continue
 
 					records.append(record)
