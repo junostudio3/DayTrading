@@ -96,15 +96,8 @@ class DayTradingBot:
                 hour = current_time.tm_hour
                 minute = current_time.tm_min
                 candle = self.auth.price.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
-                price = None
-                volume = None
-                stick_time = None
                 # candle 데이터중 첫번째 (가장 최근 데이터)의 현재가와 체결량을 가져온다.)
-                if candle and len(candle) > 0 and "stck_prpr" in candle[0] and "cntg_vol" in candle[0] and "stck_cntg_hour" in candle[0]:
-                    price = float(candle[0]["stck_prpr"])
-                    volume = int(candle[0]["cntg_vol"])
-                    stick_time = candle[0]["stck_cntg_hour"]
-                else:
+                if candle is None:
                     raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
 
                 break
@@ -119,10 +112,9 @@ class DayTradingBot:
 
         self.last_price_update_at[symbol_item.pdno] = now
 
-        if self.price_analysis.add_price(symbol_item, price, volume, stick_time):
+        if self.price_analysis.add_price(symbol_item, candle):
             # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
-            print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {price} / 거래량: {volume}")
-        return price
+            print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {candle.close_price} / 거래량: {candle.volume}")
 
     def _update_snapshot_collect_candidates(self):
         self.snapshot_collect_candidates: list[SymbolItem] = []

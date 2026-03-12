@@ -64,7 +64,8 @@ class TradeReporter:
                 if self.account_balance is None:
                     f.write(f"[{timestamp}] {text}\n")
                 else:
-                    f.write(f"[{timestamp}] [{self.account_balance.dnca_tot_amt} / D+1: {self.account_balance.nxdy_excc_amt} / D+2: {self.account_balance.prvs_rcdl_excc_amt}] / {text}\n")
+                    # 잔고 정보는 거래에 사용되는 D+2 잔고로 기록한다.
+                    f.write(f"[{timestamp}] [{self.account_balance.prvs_rcdl_excc_amt}] / {text}\n")
         except Exception as e:
             print(f"Failed to write trade log to {log_file_path}: {e}")
 

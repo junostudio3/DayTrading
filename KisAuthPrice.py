@@ -85,9 +85,9 @@ class KisAuthPrice:
                 output = data["output2"]
                 if output is None or len(output) == 0:
                     raise Exception(f"Failed to get candlestick data: data is empty")
-                price = output[0]["stck_prpr"]
-                low_price = output[0]["stck_lwpr"]
-                high_price = output[0]["stck_hgpr"]
+                price = int(output[0]["stck_prpr"])
+                low_price = int(output[0]["stck_lwpr"])
+                high_price = int(output[0]["stck_hgpr"])
                 volume = int(output[0]["cntg_vol"])
                 stick_time = output[0]["stck_cntg_hour"] # 봉이 시작된 시간 (HHMMSS)
                 candle = Candlestick(price, high_price, low_price, price, volume)
