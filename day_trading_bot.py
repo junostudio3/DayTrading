@@ -640,10 +640,6 @@ class DayTradingBot:
                 total_check_result = OrderCheckResult()
 
                 for check in check_list:
-                    if check.rmn_qty != 0:
-                        # 잔여수량 0이 아니면 체결 안된 것으로 간주
-                        return False
-                    
                     total_check_result.add(check)
 
                 return total_check_result
