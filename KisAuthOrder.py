@@ -16,6 +16,13 @@ class OrderCheckResult:
         self.tot_ccld_qty = 0  # 총 체결 수량
 
     def add(self, other):
+        if self.ord_unpr == 0 and self.rmn_qty == 0 and self.tot_ccld_qty == 0:
+            # 초기값이 모두 0인 경우, 다른 객체의 값을 그대로 가져온다.
+            self.ord_unpr = other.ord_unpr
+            self.rmn_qty = other.rmn_qty
+            self.tot_ccld_qty = other.tot_ccld_qty
+            return
+
         if self.ord_unpr != other.ord_unpr:
             raise ValueError("주문 가격이 다릅니다.")
 
@@ -124,11 +131,11 @@ class KisAuthOrder:
             # 모의 투자에서는 시장가 주문이 지원되지 않으므로, 지정가 주문으로 대체한다.
             # 시장가 주문 대신 현재가 - 500원 (매수) 또는 현재가 + 500원 (매도)로 지정가 주문을 한다.
             candle = self.auth.price.get_one_minute_candlestick(pdno, datetime.datetime.now().hour, datetime.datetime.now().minute)
-            if candle and len(candle) > 0 and "stck_prpr" in candle[0]:
+            if candle:
                 if is_buy:
-                    price = max(int(candle[0]["stck_prpr"]) + 500, 100)
+                    price = max(int(candle.close_price) + 500, 100)
                 else:
-                    price = max(int(candle[0]["stck_prpr"]) - 500, 100) 
+                    price = max(int(candle.close_price) - 500, 100) 
                 division = OrderDivision.SETTLE
             else:
                 raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
