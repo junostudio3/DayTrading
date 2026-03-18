@@ -170,7 +170,7 @@ class DayTradingTUI(App):
         summary = self.query_one("#summary", Static)
         summary.update(
             f"상태: {market_text} | 루프: {loop_count} | 갱신: {ts}\n"
-            f"예수금: {account.get('cash', 0):,.0f} | D+1: {account.get('d1', 0):,.0f} | D+2: {account.get('d2', 0):,.0f}"
+            f"총평가금액:{account.get('tot_evlu_amt', 0):,.0f} | 예수금: {account.get('cash', 0):,.0f} | D+1: {account.get('d1', 0):,.0f} | D+2: {account.get('d2', 0):,.0f}"
         )
 
         self._render_holdings(snapshot.get("holdings", []))

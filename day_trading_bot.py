@@ -29,7 +29,8 @@ class TradeState:
 
 
 class DayTradingBot:
-    ORDER_TIMEOUT_SECONDS = 60 * 5
+    BUY_ORDER_TIMEOUT_SECONDS = 60
+    SELL_ORDER_TIMEOUT_SECONDS = 60
 
     def __init__(self):
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
@@ -284,19 +285,19 @@ class DayTradingBot:
 
         if (
             state.buy_order_requested_at > 0
-            and (time.time() - state.buy_order_requested_at) > self.ORDER_TIMEOUT_SECONDS
+            and (time.time() - state.buy_order_requested_at) > self.BUY_ORDER_TIMEOUT_SECONDS
         ):
             try:
                 self.auth.order.cancel_order(state.buy_order_no)
                 # 매수 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
                 filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
 
-                self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, "체결 대기 시간 5분 초과")  # 매수 주문 취소 로그 추가
+                self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
                 state.buy_order_no = ""
                 state.buy_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
-                self._symbol_log(symbol_item, f"매수 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
+                self._symbol_log(symbol_item, f"매수 주문 체결 대기가 {self.BUY_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
 
         check_order_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
@@ -358,19 +359,19 @@ class DayTradingBot:
 
         if (
             state.sell_order_requested_at > 0
-            and (time.time() - state.sell_order_requested_at) > self.ORDER_TIMEOUT_SECONDS
+            and (time.time() - state.sell_order_requested_at) > self.SELL_ORDER_TIMEOUT_SECONDS
         ):
             try:
                 self.auth.order.cancel_order(state.sell_order_no)
                 # 매도 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
                 filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno) * -1 # 매도 주문이므로 보유 수량에서 빠져나가는 것이어서 음수로 계산
 
-                self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, "체결 대기 시간 5분 초과")  # 매도 주문 취소 로그 추가
+                self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
                 state.sell_order_no = ""
                 state.sell_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
-                self._symbol_log(symbol_item, f"매도 주문 체결 대기가 5분을 초과했으나 주문 취소에 실패했습니다: {e}")
+                self._symbol_log(symbol_item, f"매도 주문 체결 대기가 {self.SELL_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
         
         check_order_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
@@ -529,6 +530,7 @@ class DayTradingBot:
             "market_open": self.is_market_open(),
             "loop_count": self.loop_count,
             "account": {
+                "tot_evlu_amt": self.auth.account.balance.tot_evlu_amt,
                 "cash": self.auth.account.balance.dnca_tot_amt,
                 "d1": self.auth.account.balance.nxdy_excc_amt,
                 "d2": self.auth.account.balance.prvs_rcdl_excc_amt,
@@ -611,6 +613,16 @@ class DayTradingBot:
         while True:
             try:
                 self.auth.account.update_stock()
+                break
+            except Exception as e:
+                if try_count >= 5:
+                    self.log(f"계좌 Stock 정보 업데이트 실패: {e}")
+                time.sleep(1)  # 잠시 대기 후 재시도
+                try_count += 1
+        try_count = 0
+        while True:
+            try:
+                self.auth.account.update()
                 break
             except Exception as e:
                 if try_count >= 5:

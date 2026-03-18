@@ -51,12 +51,14 @@ class KisAuthAccount:
                 # output은 리스트 형태이다.
                 if isinstance(output, list) and len(output) > 0:
                     item = output[0]  # 첫 번째 항목을 사용
+                    if item.get("tot_evlu_amt") is not None:
+                        self.balance.tot_evlu_amt = float(item.get("tot_evlu_amt", 0)) # 총평가금액
                     if item.get("dnca_tot_amt") is not None:
-                        self.balance.dnca_tot_amt = float(item.get("dnca_tot_amt", 0))
+                        self.balance.dnca_tot_amt = float(item.get("dnca_tot_amt", 0)) # 예수금총액
                     if item.get("nxdy_excc_amt") is not None:
-                        self.balance.nxdy_excc_amt = float(item.get("nxdy_excc_amt", 0))
+                        self.balance.nxdy_excc_amt = float(item.get("nxdy_excc_amt", 0)) # 익일정산금액
                     if item.get("prvs_rcdl_excc_amt") is not None:
-                        self.balance.prvs_rcdl_excc_amt = float(item.get("prvs_rcdl_excc_amt", 0))
+                        self.balance.prvs_rcdl_excc_amt = float(item.get("prvs_rcdl_excc_amt", 0)) # 가수도정산금액
 
     def update_stock(self):
         """주식 잔고 정보 업데이트"""

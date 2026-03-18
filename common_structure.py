@@ -8,6 +8,7 @@ class SymbolItem:
 
 class AccountBalance:
     def __init__(self):
-        self.dnca_tot_amt = 0  # 예수금
-        self.nxdy_excc_amt = 0  # D+1 예수금
-        self.prvs_rcdl_excc_amt = 0  # D+2 예수금
+        self.tot_evlu_amt = 0  # 총평가금액
+        self.dnca_tot_amt = 0  # 예수금총액
+        self.nxdy_excc_amt = 0  # D+1 예수금 (익일정산금액)
+        self.prvs_rcdl_excc_amt = 0  # D+2 예수금 (가수도정산금액)

@@ -129,13 +129,10 @@ class KisAuthOrder:
 
         if self.auth.is_virtual and division == OrderDivision.MARKET:
             # 모의 투자에서는 시장가 주문이 지원되지 않으므로, 지정가 주문으로 대체한다.
-            # 시장가 주문 대신 현재가 - 500원 (매수) 또는 현재가 + 500원 (매도)로 지정가 주문을 한다.
+            # 시장가 주문 대신 현재가 캔들스틱의 종가를 주문 가격으로 사용한다.
             candle = self.auth.price.get_one_minute_candlestick(pdno, datetime.datetime.now().hour, datetime.datetime.now().minute)
             if candle:
-                if is_buy:
-                    price = max(int(candle.close_price) + 500, 100)
-                else:
-                    price = max(int(candle.close_price) - 500, 100) 
+                price = int(candle.close_price)
                 division = OrderDivision.SETTLE
             else:
                 raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")

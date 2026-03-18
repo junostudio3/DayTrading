@@ -64,7 +64,7 @@ class TradeReporter:
                 if self.account_balance is None:
                     f.write(f"[{timestamp}] {text}\n")
                 else:
-                    f.write(f"[{timestamp}] [{self.account_balance.dnca_tot_amt}] / {text}\n")
+                    f.write(f"[{timestamp}] [{self.account_balance.tot_evlu_amt}] / {text}\n")
         except Exception as e:
             print(f"Failed to write trade log to {log_file_path}: {e}")
 
