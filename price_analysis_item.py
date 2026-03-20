@@ -216,6 +216,30 @@ class PriceAnalysisItem:
             ema = price * k + ema * (1 - k)
         return ema
 
+    def get_current_indicators(self):
+        """현재 기술적 지표 상태를 반환합니다."""
+        if not self.candle_stick_5minute:
+            return {}
+
+        candles = self.candle_stick_5minute
+        closes = [c.close_price for c in candles]
+
+        # 단기 이동 평균 및 보조지표 계산
+        ema20 = self._ema(closes, 20)
+        ema60 = self._ema(closes, 60)
+        rsi = self._rsi(closes, 14)
+        atr = self._atr(candles, 14)
+        volume = candles[-1].volume if len(candles) > 0 else 0
+
+        # 결과 포맷팅 (소수점 2자리)
+        return {
+            "RSI": round(rsi, 2) if rsi is not None else None,
+            "EMA20": round(ema20, 2) if ema20 is not None else None,
+            "EMA60": round(ema60, 2) if ema60 is not None else None,
+            "ATR": round(atr, 2) if atr is not None else None,
+            "Vol": int(volume)
+        }
+
     # 구매 추세 조건    
     def _is_purchase_trend_recommended(self):
         # 구매 추세 추천 로직

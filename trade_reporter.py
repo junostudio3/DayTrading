@@ -43,6 +43,22 @@ class TradeReporter:
         log_text = trade_type.get_kr_text()
         quantity_text = f"이미 체결된 수량: {quantity}" if trade_type in [TradeType.BUY_CANCELLED, TradeType.SELL_CANCELLED] else f"수량: {quantity}"
         log_text = f"{log_text} / {quantity_text} / 가격: {price}"
+        
+        # 특정 거래 유형에서 기술적 지표를 리포트에 추가
+        if trade_type in [TradeType.BUY, TradeType.SELL, TradeType.IMMEDIATE_SELL]:
+            # self.bot.price_analysis.items에서 현재 지표 추출
+            if hasattr(self.bot, 'price_analysis') and symbol_item.pdno in self.bot.price_analysis.items:
+                p_item = self.bot.price_analysis.items[symbol_item.pdno]
+                if hasattr(p_item, 'get_current_indicators'):
+                    indicators = p_item.get_current_indicators()
+                    if indicators:
+                        ind_strs = []
+                        for k, v in indicators.items():
+                            if v is not None:
+                                ind_strs.append(f"{k}:{v}")
+                        if ind_strs:
+                            log_text += f" / 지표: [{', '.join(ind_strs)}]"
+
         if text:
             log_text += f" / 사유: {text}"
         self._add_log(symbol_item, log_text)
