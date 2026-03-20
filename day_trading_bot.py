@@ -52,6 +52,7 @@ class DayTradingBot:
         self.is_running = True
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
+        self.sell_cooldown: dict[str, float] = {}
         self.monitor_list: list[SymbolItem] = []
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
@@ -228,6 +229,10 @@ class DayTradingBot:
             state.step = TradeStep.JUDGE_STEP
             return
 
+        cooldown_end = self.sell_cooldown.get(pdno, 0.0)
+        if time.time() < cooldown_end:
+            return
+
         if self.price_analysis.is_purchase_recommended(pdno) is False:
             return
 
@@ -384,6 +389,8 @@ class DayTradingBot:
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
+            # 매도 후 10분간 (600초) 해당 종목의 재진입을 금지하여 휩쏘를 방지한다.
+            self.sell_cooldown[pdno] = time.time() + 600
             state.step = TradeStep.DECIDE_ON_PURCHASE
             
 

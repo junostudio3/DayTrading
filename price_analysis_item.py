@@ -142,6 +142,23 @@ class PriceAnalysisItem:
         if self.is_purchase_overtime():
             return False
 
+        candles = self.candle_stick_5minute
+        if len(candles) < 60:
+            return False
+
+        closes = [c.close_price for c in candles]
+        
+        # 과매수 방지 필터: RSI가 75 이상이면 진입 금지 (단기 고점 물림 방지)
+        rsi = self._rsi(closes, 14)
+        if rsi is not None and rsi > 75:
+            return False
+
+        # 이격도 필터: 현재가가 20EMA 대비 너무 높게(급등) 떠 있으면 추격 매수 금지
+        ema20 = self._ema(closes, 20)
+        current_price = closes[-1]
+        if ema20 is not None and (current_price - ema20) / ema20 > 0.03:
+            return False
+
         if not self._is_purchase_trend_recommended():
             return False
         if self._is_pullback_buy():
@@ -150,6 +167,41 @@ class PriceAnalysisItem:
             return True
 
         return False
+
+    def _rsi(self, closes, period=14):
+        if len(closes) < period + 1:
+            return None
+        deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
+        gains = [d if d > 0 else 0 for d in deltas]
+        losses = [-d if d < 0 else 0 for d in deltas]
+        
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        
+        for i in range(period, len(deltas)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+            
+        if avg_loss == 0:
+            return 100.0
+        rs = avg_gain / avg_loss
+        return 100.0 - (100.0 / (1.0 + rs))
+
+    def _atr(self, candles, period=14):
+        if len(candles) < period + 1:
+            return None
+        tr_list = []
+        for i in range(1, len(candles)):
+            high = candles[i].high_price
+            low = candles[i].low_price
+            prev_close = candles[i-1].close_price
+            tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+            tr_list.append(tr)
+            
+        atr = sum(tr_list[:period]) / period
+        for i in range(period, len(tr_list)):
+            atr = (atr * (period - 1) + tr_list[i]) / period
+        return atr
 
     def _ema(self, prices, period):
         if len(prices) < period:
@@ -315,8 +367,17 @@ class PriceAnalysisItem:
             (local_time.tm_hour == 15 and local_time.tm_min >= 30):
             return True
         
-        # -0.6% 손절 로직
         if not self.candle_stick_5minute:
             return False
 
-        return self.candle_stick_5minute[-1].close_price <= purchase_price * 0.994
+        # ATR 기반 동적 손절 폭 (최소 1.5%에서 최대 3.0%으로 설정)
+        current_price = self.candle_stick_5minute[-1].close_price
+        atr = self._atr(self.candle_stick_5minute, 14)
+        
+        stop_loss_ratio = 0.015 # 기본 1.5% (기존 0.6%는 노이즈에 너무 취약)
+        if atr is not None and current_price > 0:
+            # 보수적으로 ATR의 1.5배수 정도를 손절로 설정하되 너무 크거나 작지 않게 제한
+            atr_ratio = (atr * 1.5) / current_price 
+            stop_loss_ratio = max(0.015, min(0.03, atr_ratio))
+            
+        return current_price <= purchase_price * (1.0 - stop_loss_ratio)
