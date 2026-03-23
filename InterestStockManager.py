@@ -135,12 +135,6 @@ class InterestStockManager:
 
         return True
 
-    def update_trade_date(self, pdno: str):
-        existing = next((item for item in self.buy_list if item.stock.pdno == pdno), None)
-        if existing:
-            existing.added_at = time.time()
-            self.save()
-
     def enable_keep_7days(self):
         # 임시로 해당 기능 끔
         #self.keep_7days = True

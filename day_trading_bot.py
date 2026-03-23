@@ -310,7 +310,6 @@ class DayTradingBot:
         if check_order_result.rmn_qty == 0:
             # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
             self.update_account_stock()
-            self.interest_stock_manager.update_trade_date(pdno)
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매수 체결 로그 추가
@@ -385,7 +384,6 @@ class DayTradingBot:
             # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
             self.update_account_stock()
 
-            self.interest_stock_manager.update_trade_date(pdno)
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
@@ -561,7 +559,6 @@ class DayTradingBot:
 
         result = self.buy(symbol_item, quantity, price)
         self.update_account_stock()
-        self.interest_stock_manager.update_trade_date(pdno)
         return result
 
     def place_manual_sell(self, pdno: str, quantity: int):
@@ -586,7 +583,6 @@ class DayTradingBot:
 
         result = self.sell(symbol_item, quantity, price)
         self.update_account_stock()
-        self.interest_stock_manager.update_trade_date(pdno)
         return result
 
     def update_sell_list(self):
