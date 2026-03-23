@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+import httpx
+import asyncio
 
 from textual import on
 from textual.app import App, ComposeResult
@@ -9,8 +11,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Static, TabbedContent, TabPane
 
-from trading_engine import TradingEngine
-
+API_BASE_URL = "http://127.0.0.1:8000"
 
 class OrderModal(ModalScreen[dict | None]):
     def __init__(self, side: str, pdno: str):
@@ -107,9 +108,9 @@ class DayTradingTUI(App):
     }
     """
 
-    def __init__(self, engine: TradingEngine):
+    def __init__(self):
         super().__init__()
-        self.engine = engine
+        self.client = httpx.AsyncClient(base_url=API_BASE_URL, timeout=3.0)
         self._watch_pdnos: list[str] = []
         self._holding_pdnos: list[str] = []
         self._rendered_log_sizes = {
@@ -145,15 +146,18 @@ class DayTradingTUI(App):
         holdings.add_columns("종목", "이름", "수량", "매입가", "현재가", "손익률")
         watch.add_columns("종목", "이름", "현재가", "캔들수", "체결량", "진행")
 
-        self.engine.start()
         self.set_interval(1.0, self.refresh_dashboard)
 
-    def on_unmount(self):
-        self.engine.stop()
+    async def on_unmount(self):
+        await self.client.aclose()
 
-    def refresh_dashboard(self):
-        snapshot = self.engine.get_snapshot()
-        if not snapshot:
+    async def refresh_dashboard(self):
+        try:
+            resp = await self.client.get("/snapshot")
+            if resp.status_code != 200:
+                return
+            snapshot = resp.json()
+        except Exception:
             return
 
         snapshot_timestamp = snapshot.get("timestamp")
@@ -175,9 +179,11 @@ class DayTradingTUI(App):
 
         self._render_holdings(snapshot.get("holdings", []))
         self._render_watch(snapshot.get("watch", []))
-        self._render_graph()
         self._render_logs("logs", snapshot.get("logs", []))
         self._render_logs("trade-logs", snapshot.get("trade_logs", []))
+        
+        # Async call for graph
+        await self._render_graph_async()
 
     def _render_holdings(self, rows: list[dict]):
         table = self.query_one("#holdings", DataTable)
@@ -216,14 +222,13 @@ class DayTradingTUI(App):
                 row.get("name", pdno),
                 "-" if price is None else f"{price:,.0f}",
                 str(row.get("candles", 0)),
-                # 체결량은 3자리마다 콤마로 구분해서 표시한다
                 f"{row.get('volume', 0):,}",
                 step
             )
         if rows and current_row >= 0:
             table.move_cursor(row=min(current_row, len(rows) - 1))
 
-    def _render_graph(self):
+    async def _render_graph_async(self):
         graph = self.query_one("#graph", Static)
         
         watch_table = self.query_one("#watch", DataTable)
@@ -236,14 +241,15 @@ class DayTradingTUI(App):
         else:
             pdno = self._watch_pdnos[0]
             
-        c_list = []
         try:
-            items = self.engine.bot.price_analysis.items
-            if pdno in items:
-                # 5분봉 리스트 가져오기
-                c_list = items[pdno].candle_stick_5minute
+            resp = await self.client.get(f"/candles/{pdno}")
+            if resp.status_code != 200:
+                graph.update("데이터 요청 실패")
+                return
+            c_list = resp.json()
         except Exception:
-            pass
+            graph.update("서버 연결 실패")
+            return
             
         if not c_list:
             graph.update("데이터가 없습니다.")
@@ -252,25 +258,19 @@ class DayTradingTUI(App):
         from datetime import datetime
         import plotext as plt
 
-        # 최근 50개 캔들만 표시
-        recent_candles = c_list[-50:]
-        
-        dates = [datetime.fromtimestamp(c.end_time).strftime('%d/%m/%Y %H:%M:%S') if c.end_time else "" for c in recent_candles]
-        
+        dates = [datetime.fromtimestamp(c['end_time']).strftime('%d/%m/%Y %H:%M:%S') if c.get('end_time') else "" for c in c_list]
         prices = {
-            "Open": [c.open_price for c in recent_candles],
-            "High": [c.high_price for c in recent_candles],
-            "Low": [c.low_price for c in recent_candles],
-            "Close": [c.close_price for c in recent_candles],
+            "Open": [c['open_price'] for c in c_list],
+            "High": [c['high_price'] for c in c_list],
+            "Low": [c['low_price'] for c in c_list],
+            "Close": [c['close_price'] for c in c_list],
         }
         
         plt.clf()
         plt.theme("dark")
-        # Plotext에 사용할 시간 형식 지정 (clf 후에 호출해야 함)
         plt.date_form('d/m/Y H:M:S')
         
         try:
-            # widget 크기에 맞춰 그리기 시도
             width, height = graph.size
             plt.plotsize(max(10, width), max(5, height - 2))
         except Exception:
@@ -279,7 +279,6 @@ class DayTradingTUI(App):
         plt.candlestick(dates, prices)
         plt.title(f"{pdno} 5분봉 차트")
         
-        # Plotext의 결과를 ANSI 문자열로 추출하여 업데이트
         from rich.text import Text
         ansi_str = plt.build()
         graph.update(Text.from_ansi(ansi_str))
@@ -321,7 +320,6 @@ class DayTradingTUI(App):
         if not pdno:
             self.notify("주문할 종목이 없습니다.", severity="warning")
             return
-
         self.push_screen(OrderModal("buy", pdno), self._on_order_modal_result)
 
     def action_sell(self):
@@ -329,13 +327,26 @@ class DayTradingTUI(App):
         if not pdno:
             self.notify("주문할 종목이 없습니다.", severity="warning")
             return
-
         self.push_screen(OrderModal("sell", pdno), self._on_order_modal_result)
 
-    def _on_order_modal_result(self, result: dict | None):
+    async def _on_order_modal_result(self, result: dict | None):
         if result is None:
             return
 
-        self.engine.submit_order(result["side"], result["pdno"], result["quantity"])
-        order_text = "매수" if result["side"] == "buy" else "매도"
-        self.notify(f"{order_text} 주문 요청: {result['pdno']} x {result['quantity']}")
+        try:
+            resp = await self.client.post("/order", json={
+                "side": result["side"],
+                "pdno": result["pdno"],
+                "quantity": result["quantity"]
+            })
+            if resp.status_code == 200:
+                order_text = "매수" if result["side"] == "buy" else "매도"
+                self.notify(f"{order_text} 주문 요청 완료: {result['pdno']} x {result['quantity']}")
+            else:
+                self.notify(f"주문 요청 실패: {resp.text}", severity="error")
+        except Exception as e:
+            self.notify(f"서버와의 통신 오류: {e}", severity="error")
+
+if __name__ == "__main__":
+    app = DayTradingTUI()
+    app.run()
