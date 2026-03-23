@@ -216,6 +216,14 @@ class PriceAnalysisItem:
             ema = price * k + ema * (1 - k)
         return ema
 
+    def _std(self, prices, period):
+        if len(prices) < period:
+            return None
+        mean = sum(prices[-period:]) / period
+        variance = sum((p - mean) ** 2 for p in prices[-period:]) / period
+        import math
+        return math.sqrt(variance)
+
     def get_current_indicators(self):
         """현재 기술적 지표 상태를 반환합니다."""
         if not self.candle_stick_5minute:
@@ -231,12 +239,20 @@ class PriceAnalysisItem:
         atr = self._atr(candles, 14)
         volume = candles[-1].volume if len(candles) > 0 else 0
 
+        # 볼린저 밴드 계산
+        sma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else None
+        std20 = self._std(closes, 20) if len(closes) >= 20 else None
+        bb_upper = sma20 + 2 * std20 if sma20 is not None and std20 is not None else None
+        bb_lower = sma20 - 2 * std20 if sma20 is not None and std20 is not None else None
+
         # 결과 포맷팅 (소수점 2자리)
         return {
             "RSI": round(rsi, 2) if rsi is not None else None,
             "EMA20": round(ema20, 2) if ema20 is not None else None,
             "EMA60": round(ema60, 2) if ema60 is not None else None,
             "ATR": round(atr, 2) if atr is not None else None,
+            "BB_Up": round(bb_upper, 2) if bb_upper is not None else None,
+            "BB_Low": round(bb_lower, 2) if bb_lower is not None else None,
             "Vol": int(volume)
         }
 
@@ -394,14 +410,14 @@ class PriceAnalysisItem:
         if not self.candle_stick_5minute:
             return False
 
-        # ATR 기반 동적 손절 폭 (최소 1.5%에서 최대 3.0%으로 설정)
+        # ATR 기반 동적 손절 폭 (최소 1.5%에서 최대 4.5%으로 설정 - 휩쏘 방지)
         current_price = self.candle_stick_5minute[-1].close_price
         atr = self._atr(self.candle_stick_5minute, 14)
         
-        stop_loss_ratio = 0.015 # 기본 1.5% (기존 0.6%는 노이즈에 너무 취약)
+        stop_loss_ratio = 0.015 # 기본 1.5%
         if atr is not None and current_price > 0:
-            # 보수적으로 ATR의 1.5배수 정도를 손절로 설정하되 너무 크거나 작지 않게 제한
-            atr_ratio = (atr * 1.5) / current_price 
-            stop_loss_ratio = max(0.015, min(0.03, atr_ratio))
+            # 변동폭에 맞게 ATR의 2.0배수를 손절선으로 잡아 노이즈에 털리지 않게 튜닝
+            atr_ratio = (atr * 2.0) / current_price 
+            stop_loss_ratio = max(0.015, min(0.045, atr_ratio))
             
         return current_price <= purchase_price * (1.0 - stop_loss_ratio)
