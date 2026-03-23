@@ -8,7 +8,7 @@ from KisKey import app_secret
 from info_kosdaq import find_kosdaq_by_name, load_kosdaq_master
 from info_kospi import find_kospi_by_name, load_kospi_master
 from price_analysis import PriceAnalysis
-from InterestStockManager import InterestStockManager
+from interest_stock_manager import InterestStockManager
 import time
 from dataclasses import dataclass
 from typing import Optional

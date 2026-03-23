@@ -75,15 +75,10 @@ class InterestStockManager:
         self.save()
   
     def is_avoided(self, pdno: str, name: str, price: int = 0, volume: int = 0) -> bool:
-        if SymbolFilter.is_not_interested(name):
+        if SymbolFilter.is_not_interested_by_name(name):
             return True
         
-        # 가격이 너무 큰 종목은 피한다 (하드코딩)
-        if price > 25000:
-            return True
-
-        # 가격이 너무 낮은 종목은 % 계산시 작은 값으로도 큰 변동이 발생할 수 있으므로 피한다 (하드코딩)
-        if price <= 7000:
+        if SymbolFilter.is_not_interested_by_price(price):
             return True
 
         return False
@@ -103,8 +98,6 @@ class InterestStockManager:
         if existing:
             existing.price = price
             existing.volume = volume
-            if existing.added_at is None:
-                existing.added_at = time.time()
             self.buy_list.sort(key=lambda x: x.volume, reverse=True)
             self.save()
             return False
