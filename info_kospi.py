@@ -214,7 +214,7 @@ def load_kospi_master(filepath: str = None) -> List[KospiCode]:
 							break
 					record = _parse_record(raw[:RECORD_SIZE])
 					name = record.hts_kor_isnm
-					if SymbolFilter.is_not_interested(name):
+					if SymbolFilter.is_not_interested_by_name(name):
 							continue
 
 					records.append(record)
