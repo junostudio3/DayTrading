@@ -321,7 +321,7 @@ class PriceAnalysisItem:
     def _is_pullback_buy(self):
         # 눌림목 구매 추천 로직
         candles = self.candle_stick_5minute
-        if len(candles) < 60:
+        if len(candles) < TradingParams.MIN_CANDLE_COUNT:
             return False
 
         closes = [c.close_price for c in candles]

@@ -5,8 +5,8 @@ from KisKey import app_domain
 from KisKey import app_is_virtual
 from KisKey import app_key
 from KisKey import app_secret
-from info_kosdaq import find_kosdaq_by_name, load_kosdaq_master
-from info_kospi import find_kospi_by_name, load_kospi_master
+from info_kosdaq import load_kosdaq_master
+from info_kospi import load_kospi_master
 from price_analysis import PriceAnalysis
 from interest_stock_manager import InterestStockManager
 import time
@@ -276,9 +276,7 @@ class DayTradingBot:
         self.buy_fail_counts[pdno] = 0
 
         order_no = order.get("ODNO", "")
-
-
-        self.trade_reporter.add(TradeType.BUY, symbol_item, order_quantity, current_price)  
+        self.trade_reporter.add(TradeType.BUY, symbol_item, order_quantity, current_price)
         state.buy_order_no = order_no
         state.buy_order_requested_at = time.time()
         state.step = TradeStep.WAIT_ACCEPT_PURCHASE
@@ -429,7 +427,6 @@ class DayTradingBot:
                     self.log("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
                 else:
                     self.log("장외 시간입니다. 9:00 ~ 15:30 사이에만 동작합니다.")
-                self.price_analysis.save_cache()
 
             self.is_running = False
             return
@@ -442,7 +439,6 @@ class DayTradingBot:
         processed_pdnos = set()
         for symbol_item in self.monitor_list:
             pdno = symbol_item.pdno
-            name = symbol_item.prdt_name
             if not pdno:
                 continue
             if pdno in processed_pdnos:
@@ -474,8 +470,6 @@ class DayTradingBot:
                 state.step = TradeStep.DECIDE_ON_PURCHASE
 
         self.loop_count += 1
-        if self.loop_count % 60 == 0:
-            self.price_analysis.save_cache()
 
     def get_dashboard_snapshot(self):
         pdno_to_name = {}
@@ -500,10 +494,6 @@ class DayTradingBot:
                 candle_count = len(item.candle_stick_5minute)
                 current_price = item.candle_stick_5minute[-1].close_price
                 volume = item.candle_stick_5minute[-1].volume
-
-                inventory = self.auth.account.stocks_by_pdno.get(pdno)
-                if inventory is not None:
-                    purchase_price = float(inventory['pchs_avg_pric'])
 
             watch_rows.append({
                 "pdno": pdno,
@@ -593,7 +583,6 @@ class DayTradingBot:
     def update_sell_list(self):
         self.update_account_stock()
 
-        # self.kosdq_monitor_list에 매도 리스트 업데이트
         self.monitor_list: list[SymbolItem] = []
         monitor_pdnos = set()
 

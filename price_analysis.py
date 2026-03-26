@@ -66,12 +66,4 @@ class PriceAnalysis:
             return self.items[pdno].is_sell_stop_loss_recommended(purchase_price)
         return False
 
-    # legacy save/load methods are retained for backward compatibility
-    def save_cache(self):
-        # no-op for new per-pdno sqlite storage; data written incrementally
-        pass
 
-    # keep old method name around but unused
-    def load_cache(self):
-        # kept for compatibility; actual loading is done in __init__
-        self._load_cache()

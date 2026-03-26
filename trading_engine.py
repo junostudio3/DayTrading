@@ -34,7 +34,7 @@ class TradingEngine:
         self._stop_event.set()
         if self._thread.is_alive():
             self._thread.join(timeout=3)
-        self.bot.price_analysis.save_cache()
+
 
     def submit_order(self, side: str, pdno: str, quantity: int):
         self._order_queue.put({"side": side, "pdno": pdno, "quantity": quantity})
