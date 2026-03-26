@@ -1,5 +1,5 @@
 from candlestick import Candlestick
-from KisAuth import KisAuth
+from kis_auth import KisAuth
 import datetime
 
 class KisAuthPrice:

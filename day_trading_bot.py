@@ -1,5 +1,5 @@
-from KisAuth import KisAuth
-from KisAuthOrder import OrderCheckResult
+from kis_auth import KisAuth
+from kis_auth_order import OrderCheckResult
 from KisKey import app_account
 from KisKey import app_domain
 from KisKey import app_is_virtual
