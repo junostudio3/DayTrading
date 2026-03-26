@@ -310,7 +310,7 @@ class DayTradingBot:
 
         check_order_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
 
-        if check_order_result.rmn_qty == 0:
+        if check_order_result is not None and check_order_result.rmn_qty == 0:
             # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
             self.update_account_stock()
             state.buy_order_no = ""
@@ -383,7 +383,7 @@ class DayTradingBot:
         
         check_order_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
 
-        if check_order_result.rmn_qty == 0:
+        if check_order_result is not None and check_order_result.rmn_qty == 0:
             # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
             self.update_account_stock()
 
@@ -637,12 +637,11 @@ class DayTradingBot:
             self._symbol_log(symbol_item, f"매수 주문 실패\n{e}")
             return None
 
-    def check_order_completed(self, symbol_item: SymbolItem, order_no: str, is_buy: bool) -> OrderCheckResult:
-        """매도/매수 주문 체결 여부 확인"""
+    def check_order_completed(self, symbol_item: SymbolItem, order_no: str, is_buy: bool) -> Optional[OrderCheckResult]:
+        """매도/매수 주문 체결 여부 확인. 5회 실패 시 None 반환."""
         pd_no = symbol_item.pdno
-        try_count = 0
 
-        while True:
+        for try_count in range(10):
             try:
                 check_list: List[OrderCheckResult] = self.auth.order.order_check(pd_no, order_no, is_buy)
 
@@ -653,15 +652,10 @@ class DayTradingBot:
 
                 return total_check_result
             except Exception as e:
-                if try_count >= 5:
-                    if is_buy:
-                        self._symbol_log(symbol_item, f"매수 주문 체결 확인 실패\n{e}")
-                    else:
-                        self._symbol_log(symbol_item, f"매도 주문 체결 확인 실패\n{e}")
+                time.sleep(1)
 
-                time.sleep(1)  # 잠시 대기 후 재시도
-                try_count += 1
-                continue
+        self._symbol_log(symbol_item, "주문 체결 확인 10회 실패, 다음 루프에서 재시도합니다.")
+        return None
 
     def sell(self, symbol_item: SymbolItem, quantity: int, price: int):
         """현금 매도 주문"""
