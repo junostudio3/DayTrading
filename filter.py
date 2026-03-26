@@ -109,6 +109,29 @@ class SymbolFilter:
 
         return False
 
+    def is_not_interested_by_record(record) -> bool:
+        """MST 마스터 레코드의 상태 필드를 이용한 사전 필터링.
+        거래정지·정리매매·관리종목·SPAC·ETP·투자주의종목을 제외한다."""
+        # 거래정지
+        if getattr(record, 'trht_yn', 'N') == 'Y':
+            return True
+        # 정리매매
+        if getattr(record, 'sltr_yn', 'N') == 'Y':
+            return True
+        # 관리종목
+        if getattr(record, 'mang_issu_yn', 'N') == 'Y':
+            return True
+        # 기업인수목적회사(SPAC)
+        if getattr(record, 'etpr_undt_objt_co_yn', 'N') == 'Y':
+            return True
+        # ETP (ETF/ETN 등)
+        if getattr(record, 'etp_prod_cls_code', '0') not in ('', '0'):
+            return True
+        # 투자주의환기종목
+        if getattr(record, 'invt_alrm_yn', 'N') == 'Y':
+            return True
+        return False
+
     def is_not_interested_by_price(price: int) -> bool:
         if price > TradingParams.MAX_STOCK_PRICE:
             return True

@@ -156,9 +156,9 @@ class DayTradingBot:
         if len(self.snapshot_collect_candidates) == 0:
             # 한번씩은 모든 종목을 탐색했다.
             # 모든 데이터가 symbol_snapshot_cache에 저장되어 있을 것이다
-            # 이제부터는 이것을 유지하고 가장 오래된 데이터부터만 하나씩 탐색한다.
-            self.interest_stock_manager.mark_initial_scan_done_done()
-            symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol()
+            # 이제부터는 거래량 우선으로 30분 TTL이 지난 종목만 갱신한다.
+            self.interest_stock_manager.mark_initial_scan_done()
+            symbol_item = self.symbol_snapshot_cache.get_high_volume_stale_symbol(min_age_seconds=1800)
         else:
             symbol_item = self.snapshot_collect_candidates.pop(0)
 
@@ -180,6 +180,10 @@ class DayTradingBot:
             if price is not None and volume is not None:
                 price = int(price)
                 volume = int(volume)
+
+                # 스냅샷 캐시 갱신 (TTL 타임스탬프 업데이트)
+                snapshot = SymbolSnapshot(symbol_item, now, price, volume)
+                self.symbol_snapshot_cache.add_snapshot(snapshot)
 
                 changed_list |= self.interest_stock_manager.update_stock(pdno, name, price, volume)
 

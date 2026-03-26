@@ -216,6 +216,8 @@ def load_kospi_master(filepath: str = None) -> List[KospiCode]:
 					name = record.hts_kor_isnm
 					if SymbolFilter.is_not_interested_by_name(name):
 							continue
+					if SymbolFilter.is_not_interested_by_record(record):
+							continue
 
 					records.append(record)
 

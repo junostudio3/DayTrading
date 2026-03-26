@@ -85,11 +85,36 @@ class SymbolSnapshotCache:
             snapshots.append(snapshot)
         return snapshots
     
-    def get_oldest_snapshot_symbol(self) -> SymbolItem:
+    def get_oldest_snapshot_symbol(self, min_age_seconds: float = 1800) -> SymbolItem:
+        """가장 오래된 스냅샷의 심볼을 반환한다.
+        min_age_seconds 이내에 갱신된 스냅샷은 건너뛴다(TTL)."""
         import sqlite3
+        import time
+        cutoff = time.time() - min_age_seconds
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute('SELECT pdno, name FROM symbol_snapshots ORDER BY timestamp ASC LIMIT 1')
+        cursor.execute(
+            'SELECT pdno, name FROM symbol_snapshots WHERE timestamp < ? ORDER BY timestamp ASC LIMIT 1',
+            (cutoff,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return SymbolItem(pdno=row[0], name=row[1])
+        return None
+
+    def get_high_volume_stale_symbol(self, min_age_seconds: float = 1800) -> SymbolItem:
+        """TTL이 지난 스냅샷 중 거래량이 가장 높은 심볼을 반환한다.
+        거래량 높은 종목을 우선적으로 갱신하기 위해 사용한다."""
+        import sqlite3
+        import time
+        cutoff = time.time() - min_age_seconds
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT pdno, name FROM symbol_snapshots WHERE timestamp < ? ORDER BY volume DESC LIMIT 1',
+            (cutoff,)
+        )
         row = cursor.fetchone()
         conn.close()
         if row:
