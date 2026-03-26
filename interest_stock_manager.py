@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from filter import SymbolFilter
+from filter import SymbolFilter, TradingParams
 from typing import List
 from common_structure import SymbolItem
 
@@ -18,9 +18,8 @@ class InterestStockManager:
     def __init__(self, cache_file_path: str = "./cache/interest_stocks.json"):
         self.cache_file_path = cache_file_path
         self.buy_list: List[InterestStockItem] = []
-        self.keep_7days: bool = False
+        self.initial_scan_done: bool = False
         self.load()
-        self.keep_7days = False # 임시
 
     def load(self):
         if os.path.exists(self.cache_file_path):
@@ -36,15 +35,17 @@ class InterestStockManager:
                         volume = item.get("volume", 0)
                         added_at = item.get("added_at", time.time())
                         if self.is_avoided(pdno, prdt_name, price, volume):
-                            # 옛날에 저장된 항목 중 피해야 할 종목이 있을 수 있으므로 로드 시에도 체크한다
                             continue
                         self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, added_at))
 
-                    self.keep_7days = data.get("keep_7days", False)
+                    self.initial_scan_done = data.get("initial_scan_done", False)
             except Exception as e:
                 print(f"Failed to load interest stocks from {self.cache_file_path}: {e}")
                 self.buy_list = []
-                self.keep_7days = False
+                self.initial_scan_done = False
+
+        # 로드 시 만료된 종목 자동 제거
+        self._purge_expired()
 
     def save(self):
         os.makedirs(os.path.dirname(self.cache_file_path), exist_ok=True)
@@ -62,7 +63,7 @@ class InterestStockManager:
                     }
                     for item in self.buy_list
                 ],
-                "keep_7days": self.keep_7days
+                "initial_scan_done": self.initial_scan_done
             }
             with open(self.cache_file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
@@ -71,13 +72,22 @@ class InterestStockManager:
 
     def clear(self):
         self.buy_list = []
-        self.keep_7days = False
+        self.initial_scan_done = False
         self.save()
-  
+
+    def _purge_expired(self):
+        """만료 기간이 지난 종목을 자동 제거한다."""
+        now = time.time()
+        expiry_seconds = TradingParams.STOCK_EXPIRY_DAYS * 24 * 60 * 60
+        before = len(self.buy_list)
+        self.buy_list = [item for item in self.buy_list if (now - item.added_at) <= expiry_seconds]
+        if len(self.buy_list) != before:
+            self.save()
+
     def is_avoided(self, pdno: str, name: str, price: int = 0, volume: int = 0) -> bool:
         if SymbolFilter.is_not_interested_by_name(name):
             return True
-        
+
         if SymbolFilter.is_not_interested_by_price(price):
             return True
 
@@ -89,7 +99,6 @@ class InterestStockManager:
         is_avoided = self.is_avoided(pdno, name, price, volume)
         if is_avoided:
             if existing:
-                # 기존에 관심 종목으로 등록되어 있었지만 이제는 피해야 하는 종목이 되었으므로 목록에서 제거한다
                 self.buy_list.remove(existing)
                 self.save()
                 return True
@@ -102,37 +111,32 @@ class InterestStockManager:
             self.save()
             return False
 
-        # self.buy_list는 기본적으로 Top 10을 유지한다 (보호 항목 제외)
-        if len(self.buy_list) >= 10:
-            candidates = None
-            if self.keep_7days:
-                now = time.time()
-                seven_days = 7 * 24 * 60 * 60
-                candidates = [item for item in self.buy_list if (now - item.added_at) > seven_days]
-            
-            if candidates:
-                # 일주일 이상된 항목이 있다면 그 중 가장 낮은 거래량을 가진 항목을 찾아서 제거한다
-                lowest_volume_item = min(candidates, key=lambda x: x.volume)
-                self.buy_list.remove(lowest_volume_item)
-            else:
-                # volume이 10번째 종목보다 작으면 탑 10에 들 수 없으므로 무시
-                self.buy_list.sort(key=lambda x: x.volume, reverse=True)
-                if volume <= self.buy_list[9].volume:
-                    return False
-                self.buy_list.pop()  # 10번째 항목 제거
+        # 신규 진입 품질 게이트: 최소 거래량 미달시 진입 불가
+        if volume < TradingParams.MIN_INTEREST_VOLUME:
+            return False
 
-        # 조건을 만족하여 탑 10에 진입하는 새 종목
+        max_count = TradingParams.INTEREST_STOCK_MAX
+
+        if len(self.buy_list) >= max_count:
+            # 만료된 종목 우선 제거
+            self._purge_expired()
+
+        if len(self.buy_list) >= max_count:
+            # 여전히 꽉 차 있으면 최하위 거래량 종목을 교체
+            self.buy_list.sort(key=lambda x: x.volume, reverse=True)
+            if volume <= self.buy_list[-1].volume:
+                return False
+            self.buy_list.pop()
+
         self.buy_list.append(InterestStockItem(pdno, name, price, volume, time.time()))
         self.buy_list.sort(key=lambda x: x.volume, reverse=True)
         self.save()
 
         return True
 
-    def enable_keep_7days(self):
-        # 임시로 해당 기능 끔
-        #self.keep_7days = True
-        #self.save()
-        pass
+    def mark_initial_scan_done(self):
+        self.initial_scan_done = True
+        self.save()
 
     def get_stocks(self) -> List[SymbolItem]:
         return [item.stock for item in self.buy_list]

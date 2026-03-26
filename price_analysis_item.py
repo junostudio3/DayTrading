@@ -45,9 +45,15 @@ class PriceAnalysisItem:
         return sqlite3.connect(self.db_path)
 
     def _load_from_db(self):
-        # load all rows sorted by time
+        # load all rows sorted by time, skip stale candles older than STOCK_EXPIRY_DAYS
+        cutoff = time.time() - (TradingParams.STOCK_EXPIRY_DAYS * 24 * 60 * 60)
         conn = self._db_connect()
         c = conn.cursor()
+
+        # DB에서 만료된 캔들 삭제
+        c.execute("DELETE FROM candles WHERE start_time < ?", (cutoff,))
+        conn.commit()
+
         for row in c.execute(
             "SELECT start_time, end_time, open_price, high_price, low_price, close_price, volume "
             "FROM candles ORDER BY start_time"

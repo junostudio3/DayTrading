@@ -45,8 +45,8 @@ class DayTradingBot:
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
 
-        if self.interest_stock_manager.keep_7days is False:
-            # interest_stock_manager에 symbol_snapshot_cache를 주입한다.(임시)
+        if not self.interest_stock_manager.initial_scan_done:
+            # 초기 스캔 전에는 symbol_snapshot_cache에서 종목을 주입한다.
             for snap_shot in self.symbol_snapshot_cache.get_all_snapshots():
                 self.interest_stock_manager.update_stock(snap_shot.symbol.pdno, snap_shot.symbol.prdt_name, snap_shot.price, snap_shot.volume)
 
@@ -157,7 +157,7 @@ class DayTradingBot:
             # 한번씩은 모든 종목을 탐색했다.
             # 모든 데이터가 symbol_snapshot_cache에 저장되어 있을 것이다
             # 이제부터는 이것을 유지하고 가장 오래된 데이터부터만 하나씩 탐색한다.
-            self.interest_stock_manager.enable_keep_7days()
+            self.interest_stock_manager.mark_initial_scan_done_done()
             symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol()
         else:
             symbol_item = self.snapshot_collect_candidates.pop(0)

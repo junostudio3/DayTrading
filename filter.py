@@ -37,6 +37,9 @@ class TradingParams:
     # ── 종목 선정 필터 ──
     MAX_STOCK_PRICE = 25000         # 관심종목 가격 상한
     MIN_STOCK_PRICE = 7000          # 관심종목 가격 하한
+    INTEREST_STOCK_MAX = 10         # 관심종목 최대 보유 수
+    STOCK_EXPIRY_DAYS = 3           # 관심종목 만료 기간(일) - 이 기간 이후 자동 교체 대상
+    MIN_INTEREST_VOLUME = 100000    # 관심종목 진입 최소 거래량 (빈자리 품질 게이트)
 
     @classmethod
     def to_report_header(cls) -> str:
@@ -61,6 +64,9 @@ class TradingParams:
             f"COOLDOWN_AFTER_CANCEL={cls.COOLDOWN_AFTER_CANCEL}s",
             f"COOLDOWN_AFTER_SELL={cls.COOLDOWN_AFTER_SELL}s",
             f"STOCK_PRICE_RANGE={cls.MIN_STOCK_PRICE}~{cls.MAX_STOCK_PRICE}",
+            f"INTEREST_STOCK_MAX={cls.INTEREST_STOCK_MAX}",
+            f"STOCK_EXPIRY_DAYS={cls.STOCK_EXPIRY_DAYS}",
+            f"MIN_INTEREST_VOLUME={cls.MIN_INTEREST_VOLUME}",
             "===========================",
         ]
         return "\n".join(lines)
