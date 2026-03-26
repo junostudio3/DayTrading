@@ -1,7 +1,9 @@
 from common_structure import AccountBalance
 from common_structure import SymbolItem
 import time
+import os
 from enum import Enum, auto
+from filter import TradingParams
 
 class TradeType(Enum):
     BUY = auto()
@@ -75,7 +77,10 @@ class TradeReporter:
         date_str = time.strftime("%Y-%m-%d", time.localtime())
         log_file_path = f"./report/{date_str}.txt"
         try:
+            is_new_file = not os.path.exists(log_file_path)
             with open(log_file_path, "a", encoding="utf-8") as f:
+                if is_new_file:
+                    f.write(TradingParams.to_report_header() + "\n\n")
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
                 if self.account_balance is None:
                     f.write(f"[{timestamp}] {text}\n")

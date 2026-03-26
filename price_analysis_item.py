@@ -5,6 +5,7 @@ from datetime import datetime
 from candlestick import Candlestick
 from candlestick import CandlestickMerger
 from common_structure import SymbolItem
+from filter import TradingParams
 
 class PriceAnalysisItem:
     def __init__(self, symbol_item: SymbolItem, cache_dir):
@@ -134,29 +135,29 @@ class PriceAnalysisItem:
         return True
     
     def is_purchase_overtime(self):
-        # 3시부터는 매도를 시작하므로 2시 50분부터는 구매 추천하지 않음
+        # FORCE_SELL_HOUR 부터는 매도를 시작하므로 그 이전 시각부터 구매 추천하지 않음
         local_time = time.localtime()
-        return (local_time.tm_hour == 14 and local_time.tm_min >= 50) or (local_time.tm_hour >= 15)
+        return (local_time.tm_hour == TradingParams.PURCHASE_OVERTIME_HOUR and local_time.tm_min >= TradingParams.PURCHASE_OVERTIME_MIN) or (local_time.tm_hour >= TradingParams.FORCE_SELL_HOUR)
         
     def is_purchase_recommended(self):
         if self.is_purchase_overtime():
             return False
 
         candles = self.candle_stick_5minute
-        if len(candles) < 60:
+        if len(candles) < TradingParams.MIN_CANDLE_COUNT:
             return False
 
         closes = [c.close_price for c in candles]
         
-        # 과매수 방지 필터: RSI가 65 이상이면 진입 금지 (단기 고점 물림 방지, 휩쏘 대비)
+        # 과매수 방지 필터
         rsi = self._rsi(closes, 14)
-        if rsi is not None and rsi > 65:
+        if rsi is not None and rsi > TradingParams.RSI_UPPER_LIMIT:
             return False
 
         # 이격도 필터: 현재가가 20EMA 대비 너무 높게(급등) 떠 있으면 추격 매수 금지
         ema20 = self._ema(closes, 20)
         current_price = closes[-1]
-        if ema20 is not None and (current_price - ema20) / ema20 > 0.02:
+        if ema20 is not None and (current_price - ema20) / ema20 > TradingParams.EMA20_DEVIATION_MAX:
             return False
 
         if not self._is_purchase_trend_recommended():
@@ -268,7 +269,7 @@ class PriceAnalysisItem:
         # 구매 추세 추천 로직
 
         candles = self.candle_stick_5minute
-        if len(candles) < 60:
+        if len(candles) < TradingParams.MIN_CANDLE_COUNT:
             return False
 
         closes = [c.close_price for c in candles]
@@ -279,12 +280,12 @@ class PriceAnalysisItem:
         if ema20 is None or ema60 is None:
             return False
     
-        # 이격도 최소 0.6%
-        if (ema20 - ema60) / ema60 < 0.006:
+        # EMA 이격도 최소 비율
+        if (ema20 - ema60) / ema60 < TradingParams.EMA_GAP_MIN:
             return False
         
         avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
-        if candles[-1].volume < avg_vol * 1.3:
+        if candles[-1].volume < avg_vol * TradingParams.TREND_VOLUME_RATIO:
             # 거래량이 충분히 증가하지 않았다면 추세로 보기 어렵다고 판단
             return False
 
@@ -306,7 +307,7 @@ class PriceAnalysisItem:
         # 4️⃣ 최근 3봉 중 2봉 이상 양봉
         recent_candles = candles[-3:]
         bullish_count = sum(1 for c in recent_candles if c.is_bullish())
-        if bullish_count < 2:
+        if bullish_count < TradingParams.TREND_BULLISH_MIN:
             return False
 
         return True
@@ -351,7 +352,7 @@ class PriceAnalysisItem:
         avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
         recent_high = max(c.high_price for c in candles[-11:-1])
 
-        if last_candle.volume < avg_vol * 1.5:
+        if last_candle.volume < avg_vol * TradingParams.BREAKOUT_VOLUME_RATIO:
             # 거래량이 충분히 증가하지 않았다면 돌파로 보기 어렵다고 판단
             return False
 
@@ -374,12 +375,12 @@ class PriceAnalysisItem:
         current_price = last.close_price
         profit_rate = (current_price - purchase_price) / purchase_price
 
-        # 1.5% 이상 수익 구간이 아니면 판매 안함
-        if profit_rate < 0.015:
+        # 최소 수익률 이상이 아니면 판매 안함
+        if profit_rate < TradingParams.TAKE_PROFIT_MIN:
             return False
 
-        if profit_rate >= 0.03:
-            # 3% 이상 수익이면 바로 판매 추천
+        if profit_rate >= TradingParams.TAKE_PROFIT_FORCE:
+            # 강제 익절 수익률 이상이면 바로 판매 추천
             return True
 
         closes = [c.close_price for c in candles]
@@ -409,21 +410,20 @@ class PriceAnalysisItem:
         # 손절 추천 로직
         local_time = time.localtime()
 
-        # 장마감시간이 15:30이므로, 15:00 이후에는 어찌 되었든 판매 추천
-        if local_time.tm_hour >= 15:
+        # 장마감시간 이후에는 어찌 되었든 판매 추천
+        if local_time.tm_hour >= TradingParams.FORCE_SELL_HOUR:
             return True
         
         if not self.candle_stick_5minute:
             return False
 
-        # ATR 기반 동적 손절 폭 (최소 1.5%에서 최대 4.5%으로 설정 - 휩쏘 방지)
+        # ATR 기반 동적 손절 폭
         current_price = self.candle_stick_5minute[-1].close_price
         atr = self._atr(self.candle_stick_5minute, 14)
         
-        stop_loss_ratio = 0.015 # 최소 기본 1.5% 보장
+        stop_loss_ratio = TradingParams.STOP_LOSS_MIN
         if atr is not None and current_price > 0:
-            # 변동폭에 맞게 ATR의 2.5배수를 손절선으로 잡아 노이즈에 털리지 않게 튜닝
-            atr_ratio = (atr * 2.5) / current_price 
-            stop_loss_ratio = max(0.015, min(0.05, atr_ratio))
+            atr_ratio = (atr * TradingParams.ATR_MULTIPLIER) / current_price 
+            stop_loss_ratio = max(TradingParams.STOP_LOSS_MIN, min(TradingParams.STOP_LOSS_MAX, atr_ratio))
             
         return current_price <= purchase_price * (1.0 - stop_loss_ratio)
