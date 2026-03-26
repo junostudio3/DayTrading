@@ -26,10 +26,11 @@ class TradeState:
     sell_order_no: str = ""
     buy_order_requested_at: float = 0.0
     sell_order_requested_at: float = 0.0
+    cooldown_until: float = 0.0
 
 
 class DayTradingBot:
-    BUY_ORDER_TIMEOUT_SECONDS = 60
+    BUY_ORDER_TIMEOUT_SECONDS = 120
     SELL_ORDER_TIMEOUT_SECONDS = 60
 
     def __init__(self):
@@ -52,7 +53,6 @@ class DayTradingBot:
         self.is_running = True
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
-        self.sell_cooldown: dict[str, float] = {}
         self.monitor_list: list[SymbolItem] = []
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
@@ -229,8 +229,7 @@ class DayTradingBot:
             state.step = TradeStep.JUDGE_STEP
             return
 
-        cooldown_end = self.sell_cooldown.get(pdno, 0.0)
-        if time.time() < cooldown_end:
+        if time.time() < state.cooldown_until:
             return
 
         if self.price_analysis.is_purchase_recommended(pdno) is False:
@@ -298,6 +297,7 @@ class DayTradingBot:
                 filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
 
                 self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
+                state.cooldown_until = time.time() + 600  # 취소 후 10분간 쿨다운 적용
                 state.buy_order_no = ""
                 state.buy_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
@@ -388,7 +388,7 @@ class DayTradingBot:
             state.sell_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
             # 매도 후 30분간 (1800초) 해당 종목의 재진입을 금지하여 잦은 휩쏘로 인한 뇌동매매를 강도높게 방지한다.
-            self.sell_cooldown[pdno] = time.time() + 1800
+            state.cooldown_until = time.time() + 1800
             state.step = TradeStep.DECIDE_ON_PURCHASE
             
 

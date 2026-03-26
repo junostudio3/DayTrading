@@ -148,15 +148,15 @@ class PriceAnalysisItem:
 
         closes = [c.close_price for c in candles]
         
-        # 과매수 방지 필터: RSI가 75 이상이면 진입 금지 (단기 고점 물림 방지)
+        # 과매수 방지 필터: RSI가 65 이상이면 진입 금지 (단기 고점 물림 방지, 휩쏘 대비)
         rsi = self._rsi(closes, 14)
-        if rsi is not None and rsi > 75:
+        if rsi is not None and rsi > 65:
             return False
 
         # 이격도 필터: 현재가가 20EMA 대비 너무 높게(급등) 떠 있으면 추격 매수 금지
         ema20 = self._ema(closes, 20)
         current_price = closes[-1]
-        if ema20 is not None and (current_price - ema20) / ema20 > 0.03:
+        if ema20 is not None and (current_price - ema20) / ema20 > 0.02:
             return False
 
         if not self._is_purchase_trend_recommended():
@@ -246,7 +246,7 @@ class PriceAnalysisItem:
         bb_lower = sma20 - 2 * std20 if sma20 is not None and std20 is not None else None
 
         # 결과 포맷팅 (소수점 2자리)
-        return {
+        result = {
             "RSI": round(rsi, 2) if rsi is not None else None,
             "EMA20": round(ema20, 2) if ema20 is not None else None,
             "EMA60": round(ema60, 2) if ema60 is not None else None,
@@ -255,6 +255,13 @@ class PriceAnalysisItem:
             "BB_Low": round(bb_lower, 2) if bb_lower is not None else None,
             "Vol": int(volume)
         }
+
+        if ema20 is not None and ema60 is not None and ema60 > 0:
+            result["EMA_Gap"] = round(((ema20 - ema60) / ema60) * 100, 2)
+        if bb_upper is not None and bb_lower is not None and sma20 is not None and sma20 > 0:
+            result["BB_Width"] = round(((bb_upper - bb_lower) / sma20) * 100, 2)
+
+        return result
 
     # 구매 추세 조건    
     def _is_purchase_trend_recommended(self):
@@ -403,8 +410,7 @@ class PriceAnalysisItem:
         local_time = time.localtime()
 
         # 장마감시간이 15:30이므로, 15:00 이후에는 어찌 되었든 판매 추천
-        if (local_time.tm_hour > 15) or \
-            (local_time.tm_hour == 15 and local_time.tm_min >= 30):
+        if local_time.tm_hour >= 15:
             return True
         
         if not self.candle_stick_5minute:
@@ -414,10 +420,10 @@ class PriceAnalysisItem:
         current_price = self.candle_stick_5minute[-1].close_price
         atr = self._atr(self.candle_stick_5minute, 14)
         
-        stop_loss_ratio = 0.015 # 기본 1.5%
+        stop_loss_ratio = 0.015 # 최소 기본 1.5% 보장
         if atr is not None and current_price > 0:
-            # 변동폭에 맞게 ATR의 2.0배수를 손절선으로 잡아 노이즈에 털리지 않게 튜닝
-            atr_ratio = (atr * 2.0) / current_price 
-            stop_loss_ratio = max(0.015, min(0.045, atr_ratio))
+            # 변동폭에 맞게 ATR의 2.5배수를 손절선으로 잡아 노이즈에 털리지 않게 튜닝
+            atr_ratio = (atr * 2.5) / current_price 
+            stop_loss_ratio = max(0.015, min(0.05, atr_ratio))
             
         return current_price <= purchase_price * (1.0 - stop_loss_ratio)
