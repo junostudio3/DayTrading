@@ -1,6 +1,7 @@
 import json
 import os
 import time
+from datetime import date, timedelta
 from filter import SymbolFilter, TradingParams
 from typing import List
 from common_structure import SymbolItem
@@ -75,12 +76,26 @@ class InterestStockManager:
         self.initial_scan_done = False
         self.save()
 
+    def _count_trading_days(self, from_ts: float, to_ts: float) -> int:
+        """from_ts ~ to_ts 사이의 영업일(월~금) 수를 계산한다."""
+        start = date.fromtimestamp(from_ts)
+        end = date.fromtimestamp(to_ts)
+        count = 0
+        current = start
+        while current < end:
+            current += timedelta(days=1)
+            if current.weekday() < 5:
+                count += 1
+        return count
+
     def _purge_expired(self):
-        """만료 기간이 지난 종목을 자동 제거한다."""
+        """만료 기간(영업일 기준)이 지난 종목을 자동 제거한다."""
         now = time.time()
-        expiry_seconds = TradingParams.STOCK_EXPIRY_DAYS * 24 * 60 * 60
         before = len(self.buy_list)
-        self.buy_list = [item for item in self.buy_list if (now - item.added_at) <= expiry_seconds]
+        self.buy_list = [
+            item for item in self.buy_list
+            if self._count_trading_days(item.added_at, now) <= TradingParams.STOCK_EXPIRY_DAYS
+        ]
         if len(self.buy_list) != before:
             self.save()
 
