@@ -30,7 +30,7 @@ class TradingParams:
 
     # ── 주문 타이밍 ──
     BUY_ORDER_TIMEOUT_SECONDS = 120     # 매수 주문 체결 대기 시간(초)
-    SELL_ORDER_TIMEOUT_SECONDS = 60     # 매도 주문 체결 대기 시간(초)
+    SELL_ORDER_TIMEOUT_SECONDS = 90     # 매도 주문 체결 대기 시간(초)
     COOLDOWN_AFTER_CANCEL = 600         # 주문 취소 후 재진입 금지 시간(초)
     COOLDOWN_AFTER_SELL = 1800          # 매도 체결 후 재진입 금지 시간(초)
 

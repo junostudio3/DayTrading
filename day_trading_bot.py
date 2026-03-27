@@ -295,9 +295,11 @@ class DayTradingBot:
             and (time.time() - state.buy_order_requested_at) > self.BUY_ORDER_TIMEOUT_SECONDS
         ):
             try:
+                # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
+                check_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
                 self.auth.order.cancel_order(state.buy_order_no)
-                # 매수 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
-                filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno)
+                self.update_account_stock()
+                filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
                 state.cooldown_until = time.time() + TradingParams.COOLDOWN_AFTER_CANCEL  # 취소 후 쿨다운 적용
@@ -369,9 +371,11 @@ class DayTradingBot:
             and (time.time() - state.sell_order_requested_at) > self.SELL_ORDER_TIMEOUT_SECONDS
         ):
             try:
+                # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
+                check_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
                 self.auth.order.cancel_order(state.sell_order_no)
-                # 매도 주문이 취소되었으므로 현재 보유 수량과 비교하여 체결된 수량을 계산한다.
-                filled_quantity = self.update_account_stock_and_get_diff_quantity(pdno) * -1 # 매도 주문이므로 보유 수량에서 빠져나가는 것이어서 음수로 계산
+                self.update_account_stock()
+                filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
                 state.sell_order_no = ""
@@ -598,12 +602,6 @@ class DayTradingBot:
             if pdno not in monitor_pdnos:
                 self.monitor_list.append(SymbolItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
-
-    def update_account_stock_and_get_diff_quantity(self, pdno: str) -> int:
-        old_quantity = int(self._find_inventory(pdno)['hldg_qty']) if self._find_inventory(pdno) else 0
-        self.update_account_stock()
-        new_quantity = int(self._find_inventory(pdno)['hldg_qty']) if self._find_inventory(pdno) else 0
-        return new_quantity - old_quantity
 
     def update_account_stock(self):
         try_count = 0
