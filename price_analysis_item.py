@@ -1,7 +1,6 @@
 import os
 import time
 import sqlite3
-from datetime import datetime
 from candlestick import Candlestick
 from candlestick import CandlestickMerger
 from common_structure import SymbolItem

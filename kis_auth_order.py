@@ -1,7 +1,7 @@
 from kis_auth import KisAuth
 import enum
 import datetime
-from typing import List, Optional
+from typing import List
 
 
 class OrderDivision(enum.Enum):

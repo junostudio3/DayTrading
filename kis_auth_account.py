@@ -1,6 +1,5 @@
 from kis_auth import KisAuth
 from common_structure import AccountBalance
-import requests
 
 
 class KisAuthAccount:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 import httpx
-import asyncio
 
 from textual import on
 from textual.app import App, ComposeResult

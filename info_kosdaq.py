@@ -5,7 +5,7 @@ KOSDAQ 종목 마스터 파일(kosdaq_code.mst) 파서
 """
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 from filter import SymbolFilter
 
