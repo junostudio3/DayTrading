@@ -267,6 +267,13 @@ class PriceAnalysisItem:
         if bb_upper is not None and bb_lower is not None and sma20 is not None and sma20 > 0:
             result["BB_Width"] = round(((bb_upper - bb_lower) / sma20) * 100, 2)
 
+        if len(candles) >= 11:
+            avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
+            if avg_vol > 0:
+                result["Vol_Ratio"] = round(volume / avg_vol, 2)
+            if closes[-11] > 0:
+                result["Momentum"] = round(((closes[-1] - closes[-11]) / closes[-11]) * 100, 2)
+
         return result
 
     # 구매 추세 조건    
