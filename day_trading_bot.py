@@ -52,6 +52,7 @@ class DayTradingBot:
 
         self.loop_count = 0
         self.is_running = True
+        self._snapshot_toggle = False
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
         self.monitor_list: list[SymbolItem] = []
@@ -156,9 +157,13 @@ class DayTradingBot:
         if len(self.snapshot_collect_candidates) == 0:
             # 한번씩은 모든 종목을 탐색했다.
             # 모든 데이터가 symbol_snapshot_cache에 저장되어 있을 것이다
-            # 이제부터는 거래량 우선으로 30분 TTL이 지난 종목만 갱신한다.
+            # 이제부터는 거래량 우선과 가장 오래된 종목을 번갈아 가며 30분 TTL이 지난 종목을 갱신한다.
             self.interest_stock_manager.mark_initial_scan_done()
-            symbol_item = self.symbol_snapshot_cache.get_high_volume_stale_symbol(min_age_seconds=1800)
+            if self._snapshot_toggle:
+                symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol(min_age_seconds=1800)
+            else:
+                symbol_item = self.symbol_snapshot_cache.get_high_volume_stale_symbol(min_age_seconds=1800)
+            self._snapshot_toggle = not self._snapshot_toggle
         else:
             symbol_item = self.snapshot_collect_candidates.pop(0)
 
