@@ -1,6 +1,7 @@
 .venv/
 log/
 cache/
+old_report/
 report/
 __pycache__/
 

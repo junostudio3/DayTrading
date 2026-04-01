@@ -7,6 +7,7 @@ class TradingParams:
 
     # ── 매수 필터 ──
     RSI_UPPER_LIMIT = 65            # 과매수 진입 차단 RSI 상한
+    RSI_LOWER_LIMIT = 30            # 과매도 진입 차단 RSI 하한 [2026-04-01 추가]
     EMA20_DEVIATION_MAX = 0.02      # 20EMA 대비 현재가 이격도 상한 (추격매수 방지)
     EMA_GAP_MIN = 0.006             # 20EMA-60EMA 이격도 최소 비율 (추세 확인)
     TREND_VOLUME_RATIO = 1.3        # 추세 매수 거래량 배수 (10봉 평균 대비)
@@ -17,6 +18,7 @@ class TradingParams:
     # ── 매도 필터 ──
     TAKE_PROFIT_MIN = 0.015         # 익절 시작 수익률 (이하이면 홀딩)
     TAKE_PROFIT_FORCE = 0.03        # 즉시 익절 수익률
+    MIN_SELL_VOLUME_RATIO = 0.2     # 매도 시 최소 거래량 비율 - 유동성 부족 매도 차단 [2026-04-01 추가]
 
     # ── 손절 필터 ──
     STOP_LOSS_MIN = 0.015           # 최소 손절 비율
@@ -31,7 +33,7 @@ class TradingParams:
     # ── 주문 타이밍 ──
     BUY_ORDER_TIMEOUT_SECONDS = 120     # 매수 주문 체결 대기 시간(초)
     SELL_ORDER_TIMEOUT_SECONDS = 90     # 매도 주문 체결 대기 시간(초)
-    COOLDOWN_AFTER_CANCEL = 600         # 주문 취소 후 재진입 금지 시간(초)
+    COOLDOWN_AFTER_CANCEL = 1800        # 주문 취소 후 재진입 금지 시간(초) [2026-04-01 600→1800 변경: 쿨타임 일원화]
     COOLDOWN_AFTER_SELL = 1800          # 매도 체결 후 재진입 금지 시간(초)
 
     # ── 종목 선정 필터 ──

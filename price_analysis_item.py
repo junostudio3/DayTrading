@@ -158,6 +158,10 @@ class PriceAnalysisItem:
         rsi = self._rsi(closes, 14)
         if rsi is not None and rsi > TradingParams.RSI_UPPER_LIMIT:
             return False
+        
+        # [2026-04-01 추가] 과매도 방지 필터 - 휩쏘 손실 방지
+        if rsi is not None and rsi < TradingParams.RSI_LOWER_LIMIT:
+            return False
 
         # 이격도 필터: 현재가가 20EMA 대비 너무 높게(급등) 떠 있으면 추격 매수 금지
         ema20 = self._ema(closes, 20)
@@ -397,6 +401,13 @@ class PriceAnalysisItem:
 
         closes = [c.close_price for c in candles]
         ema20 = self._ema(closes, 20)
+        
+        # [2026-04-01 추가] 거래량 필터 - 저유동성에서 익절 차단 (미끄러짐 방지)
+        if len(candles) >= 11:
+            avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
+            vol_ratio = last.volume / avg_vol if avg_vol > 0 else 0
+            if vol_ratio < TradingParams.MIN_SELL_VOLUME_RATIO:
+                return False  # 유동성 부족 시 익절 연기
 
         # ----------------------------
         # 🔼 상승 유지 조건
@@ -428,6 +439,14 @@ class PriceAnalysisItem:
         
         if not self.candle_stick_5minute:
             return False
+        
+        # [2026-04-01 추가] 거래량 필터 - 저유동성에서 손절 차단 (미끄러짐 방지)
+        candles = self.candle_stick_5minute
+        if len(candles) >= 11:
+            avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
+            vol_ratio = candles[-1].volume / avg_vol if avg_vol > 0 else 0
+            if vol_ratio < TradingParams.MIN_SELL_VOLUME_RATIO:
+                return False  # 유동성 부족 시 손절 연기
 
         # ATR 기반 동적 손절 폭
         current_price = self.candle_stick_5minute[-1].close_price
