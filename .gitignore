@@ -1,4 +1,5 @@
 .venv/
+information/
 log/
 cache/
 old_report/
