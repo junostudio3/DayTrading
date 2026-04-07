@@ -2,6 +2,7 @@ import copy
 import queue
 import threading
 import time
+import traceback
 from typing import Any
 
 from day_trading_bot import DayTradingBot
@@ -90,7 +91,17 @@ class TradingEngine:
                 with self._snapshot_lock:
                     self._latest_snapshot = snapshot
             except Exception as e:
-                self._append_log(f"엔진 오류: {e}")
+                err_msg = f"엔진 오류: {e}"
+                self._append_log(err_msg)
+                
+                # 파일로도 명시적으로 콜스택을 남깁니다
+                try:
+                    with open("log/server_crash.log", "a") as f:
+                        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {err_msg}\n")
+                        f.write(traceback.format_exc())
+                        f.write("-" * 80 + "\n")
+                except Exception:
+                    pass
 
             for _ in range(self.interval_seconds * 10):
                 if self._stop_event.is_set():

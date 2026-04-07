@@ -117,6 +117,7 @@ class DayTradingTUI(App):
             "trade_logs": 0,
         }
         self._last_rendered_timestamp: float | None = None
+        self._server_connected: bool = True
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -147,6 +148,21 @@ class DayTradingTUI(App):
 
         self.set_interval(1.0, self.refresh_dashboard)
 
+    def _set_server_status(self, is_connected: bool):
+        if self._server_connected == is_connected:
+            return
+        
+        self._server_connected = is_connected
+        summary = self.query_one("#summary", Static)
+        
+        if not is_connected:
+            summary.update("[bold red on white] ❌ 서버 연결 끊김! 서버 상태를 확인하세요. [/bold red on white]")
+            summary.styles.background = "red"
+            summary.styles.color = "white"
+        else:
+            summary.styles.background = "transparent"
+            summary.styles.color = "auto"
+            
     async def on_unmount(self):
         await self.client.aclose()
 
@@ -154,9 +170,12 @@ class DayTradingTUI(App):
         try:
             resp = await self.client.get("/snapshot")
             if resp.status_code != 200:
+                self._set_server_status(False)
                 return
             snapshot = resp.json()
+            self._set_server_status(True)
         except Exception:
+            self._set_server_status(False)
             return
 
         snapshot_timestamp = snapshot.get("timestamp")
