@@ -4,6 +4,7 @@ import threading
 import time
 import traceback
 from typing import Any
+from telegram_sender import send_telegram_message
 
 from day_trading_bot import DayTradingBot
 
@@ -98,8 +99,12 @@ class TradingEngine:
                 try:
                     with open("log/server_crash.log", "a") as f:
                         f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {err_msg}\n")
-                        f.write(traceback.format_exc())
+                        tb_str = traceback.format_exc()
+                        f.write(tb_str)
                         f.write("-" * 80 + "\n")
+                        
+                    # 텔레그램 크래시 알림 전송 (콜스택이 너무 길 수 있으므로 3800자로 자름)
+                    send_telegram_message(f"🚨 <b>[엔진 루프 크래시 발생]</b>\n<pre>{tb_str[:3800]}</pre>")
                 except Exception:
                     pass
 
