@@ -10,16 +10,20 @@ fi
 pkill -f "main_server.py" || true
 sleep 1
 
+# 디버그 포트 설정 (기본값: 5678)
+DEBUG_SERVER_PORT="${DEBUG_SERVER_PORT:-5678}"
+DEBUG_CLIENT_PORT="${DEBUG_CLIENT_PORT:-5679}"
+
 # FastAPI 서버 백그라운드 구동
-echo "Starting FastAPI Server..."
-python3 main_server.py > ./log/server.log 2>&1 &
+echo "Starting FastAPI Server (DEBUG_PORT=${DEBUG_SERVER_PORT})..."
+DEBUG_PORT="${DEBUG_SERVER_PORT}" python3 main_server.py > ./log/server.log 2>&1 &
 
 # 서버 로딩 대기
 sleep 3
 
 # TUI 클라이언트 실행
-echo "Starting TUI Client..."
-python3 main_tui.py
+echo "Starting TUI Client... (DEBUG_PORT=${DEBUG_CLIENT_PORT})..."
+DEBUG_PORT="${DEBUG_CLIENT_PORT}" python3 main_tui.py
 
 # TUI 종료 후 서버 종료
 echo "Shutting down FastAPI Server..."

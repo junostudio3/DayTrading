@@ -109,7 +109,8 @@ class DayTradingTUI(App):
 
     def __init__(self):
         super().__init__()
-        self.client = httpx.AsyncClient(base_url=API_BASE_URL, timeout=3.0)
+        # 디버거 일시정지 시 짧은 타임아웃으로 인한 오탐을 줄인다.
+        self.client = httpx.AsyncClient(base_url=API_BASE_URL, timeout=10.0)
         self._watch_pdnos: list[str] = []
         self._holding_pdnos: list[str] = []
         self._rendered_log_sizes = {
@@ -118,6 +119,7 @@ class DayTradingTUI(App):
         }
         self._last_rendered_timestamp: float | None = None
         self._server_connected: bool = True
+        self._last_connection_error: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -159,9 +161,14 @@ class DayTradingTUI(App):
             summary.update("[bold red on white] ❌ 서버 연결 끊김! 서버 상태를 확인하세요. [/bold red on white]")
             summary.styles.background = "red"
             summary.styles.color = "white"
+            summary.refresh(repaint=True, layout=True)
         else:
+            # 재연결 직후 즉시 안내를 바꾸고, 다음 스냅샷 렌더를 강제한다.
+            summary.update("서버 재연결됨. 데이터 갱신 중...")
             summary.styles.background = "transparent"
-            summary.styles.color = "auto"
+            summary.styles.color = "white"
+            summary.refresh(repaint=True, layout=True)
+            self._last_rendered_timestamp = None
             
     async def on_unmount(self):
         await self.client.aclose()
@@ -174,8 +181,33 @@ class DayTradingTUI(App):
                 return
             snapshot = resp.json()
             self._set_server_status(True)
-        except Exception:
+            self._last_connection_error = None
+        except httpx.ReadTimeout as e:
+            # 디버거 브레이크 중엔 서버가 잠시 멈출 수 있어 타임아웃을 별도 처리한다.
+            summary = self.query_one("#summary", Static)
+            summary.update("[bold black on yellow] ⏸ 서버 응답 지연(ReadTimeout). 디버거 재개 후 자동 복구됩니다. [/bold black on yellow]")
+            summary.styles.background = "yellow"
+            summary.styles.color = "black"
+            summary.refresh(repaint=True, layout=True)
+            self._last_rendered_timestamp = None
+
+            error_message = f"{type(e).__name__}: {e}"
+            if error_message != self._last_connection_error:
+                self._last_connection_error = error_message
+                try:
+                    self.query_one("#logs", RichLog).write(f"[snapshot] {error_message}")
+                except Exception:
+                    pass
+            return
+        except Exception as e:
             self._set_server_status(False)
+            error_message = f"{type(e).__name__}: {e}"
+            if error_message != self._last_connection_error:
+                self._last_connection_error = error_message
+                try:
+                    self.query_one("#logs", RichLog).write(f"[snapshot] {error_message}")
+                except Exception:
+                    pass
             return
 
         snapshot_timestamp = snapshot.get("timestamp")
@@ -194,6 +226,9 @@ class DayTradingTUI(App):
             f"상태: {market_text} | 루프: {loop_count} | 갱신: {ts}\n"
             f"총평가금액:{account.get('tot_evlu_amt', 0):,.0f} | 예수금: {account.get('cash', 0):,.0f} | D+1: {account.get('d1', 0):,.0f} | D+2: {account.get('d2', 0):,.0f}"
         )
+        summary.styles.background = "transparent"
+        summary.styles.color = "white"
+        summary.refresh(repaint=True, layout=True)
 
         self._render_holdings(snapshot.get("holdings", []))
         self._render_watch(snapshot.get("watch", []))
