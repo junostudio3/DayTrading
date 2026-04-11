@@ -169,6 +169,36 @@ class DayTradingTUI(App):
             summary.styles.color = "white"
             summary.refresh(repaint=True, layout=True)
             self._last_rendered_timestamp = None
+
+    def _update_summary_message(self, message: str, background: str, color: str):
+        summary = self.query_one("#summary", Static)
+        summary.update(message)
+        summary.styles.background = background
+        summary.styles.color = color
+        summary.refresh(repaint=True, layout=True)
+
+    def _show_summary_read_timeout(self):
+        self._update_summary_message(
+            "[bold black on yellow] ⏸ 서버 응답 지연(ReadTimeout). 디버거 재개 후 자동 복구됩니다. [/bold black on yellow]",
+            "yellow",
+            "black",
+        )
+        self._last_rendered_timestamp = None
+
+    def _show_summary_snapshot(self, snapshot: dict):
+        snapshot_timestamp = snapshot.get("timestamp")
+        account = snapshot.get("account", {})
+        market_open = snapshot.get("market_open", False)
+        loop_count = snapshot.get("loop_count", 0)
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(snapshot_timestamp or time.time()))
+        market_text = "장중" if market_open else "장외"
+
+        self._update_summary_message(
+            f"상태: {market_text} | 루프: {loop_count} | 갱신: {ts}\n"
+            f"총평가금액:{account.get('tot_evlu_amt', 0):,.0f} | 예수금: {account.get('cash', 0):,.0f} | D+1: {account.get('d1', 0):,.0f} | D+2: {account.get('d2', 0):,.0f}",
+            "transparent",
+            "white",
+        )
             
     async def on_unmount(self):
         await self.client.aclose()
@@ -184,12 +214,7 @@ class DayTradingTUI(App):
             self._last_connection_error = None
         except httpx.ReadTimeout as e:
             # 디버거 브레이크 중엔 서버가 잠시 멈출 수 있어 타임아웃을 별도 처리한다.
-            summary = self.query_one("#summary", Static)
-            summary.update("[bold black on yellow] ⏸ 서버 응답 지연(ReadTimeout). 디버거 재개 후 자동 복구됩니다. [/bold black on yellow]")
-            summary.styles.background = "yellow"
-            summary.styles.color = "black"
-            summary.refresh(repaint=True, layout=True)
-            self._last_rendered_timestamp = None
+            self._show_summary_read_timeout()
 
             error_message = f"{type(e).__name__}: {e}"
             if error_message != self._last_connection_error:
@@ -215,20 +240,7 @@ class DayTradingTUI(App):
             return
         self._last_rendered_timestamp = snapshot_timestamp
 
-        account = snapshot.get("account", {})
-        market_open = snapshot.get("market_open", False)
-        loop_count = snapshot.get("loop_count", 0)
-        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(snapshot_timestamp or time.time()))
-        market_text = "장중" if market_open else "장외"
-
-        summary = self.query_one("#summary", Static)
-        summary.update(
-            f"상태: {market_text} | 루프: {loop_count} | 갱신: {ts}\n"
-            f"총평가금액:{account.get('tot_evlu_amt', 0):,.0f} | 예수금: {account.get('cash', 0):,.0f} | D+1: {account.get('d1', 0):,.0f} | D+2: {account.get('d2', 0):,.0f}"
-        )
-        summary.styles.background = "transparent"
-        summary.styles.color = "white"
-        summary.refresh(repaint=True, layout=True)
+        self._show_summary_snapshot(snapshot)
 
         self._render_holdings(snapshot.get("holdings", []))
         self._render_watch(snapshot.get("watch", []))
