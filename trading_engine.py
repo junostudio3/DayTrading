@@ -15,8 +15,8 @@ class TradingEngine:
         # hook engine logging into the bot so that any message the bot emits
         # via its `log` attribute will be funneled through _append_log.
         # This allows automated orders from the bot to appear in engine logs.
-        self.bot.log = self._append_log
-        self.bot.trade_log = self._append_trade_log
+        self.bot.set_logger(self._append_log)
+        self.bot.set_trade_logger(self._append_trade_log)
 
         self.interval_seconds = max(1, min(5, interval_seconds))
         self._stop_event = threading.Event()

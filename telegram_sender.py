@@ -1,10 +1,12 @@
 import requests
 import threading
-from KisKey import telegram_bot_token, telegram_chat_id
+from KisKey import telegram_bot_token, telegram_chat_id, telegram_enable, telegram_server_power_log
 
 def send_telegram_message_sync(text: str):
     """동기 방식으로 텔레그램 메시지를 전송합니다."""
     if not telegram_bot_token or not telegram_chat_id:
+        return
+    if not telegram_enable:
         return
         
     try:
@@ -22,7 +24,8 @@ def send_telegram_message_async(text: str):
     """비동기 방식으로 텔레그램 메시지를 전송합니다."""
     if not telegram_bot_token or not telegram_chat_id:
         return
-
+    if not telegram_enable:
+        return
     thread = threading.Thread(target=send_telegram_message_sync, args=(text,), daemon=True)
     thread.start()
 
@@ -32,3 +35,8 @@ def send_telegram_message(text: str, sync: bool = False):
         send_telegram_message_sync(text)
     else:
         send_telegram_message_async(text)
+
+def send_telegram_server_power_log(text: str):
+    """서버 전원 관련 로그를 텔레그램으로 전송합니다."""
+    if telegram_server_power_log:
+        send_telegram_message(text, sync=True)

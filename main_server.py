@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from day_trading_bot import DayTradingBot
 from trading_engine import TradingEngine
 from telegram_sender import send_telegram_message
+from telegram_sender import send_telegram_server_power_log
 
 # 설정
 logging.basicConfig(level=logging.INFO)
@@ -86,7 +87,7 @@ async def lifespan(app: FastAPI):
     engine = TradingEngine(bot, interval_seconds=1)
     engine.start()
     logger.info("TradingEngine started.")
-    send_telegram_message("🟢 <b>[서버 시작]</b> Day Trading Bot 트레이딩 엔진이 기동되었습니다.")
+    send_telegram_server_power_log("🟢 <b>[서버 시작]</b> Day Trading Bot 트레이딩 엔진이 기동되었습니다.")
     
     yield  # 서버 실행 중
     
@@ -94,7 +95,7 @@ async def lifespan(app: FastAPI):
     if engine:
         engine.stop()
     logger.info("Shutdown complete.")
-    send_telegram_message("🔴 <b>[서버 종료]</b> Day Trading Bot 서버가 안전하게 종료되었습니다.", sync=True)
+    send_telegram_server_power_log("🔴 <b>[서버 종료]</b> Day Trading Bot 서버가 안전하게 종료되었습니다.", sync=True)
 
 
 app = FastAPI(title="Day Trading Bot API", lifespan=lifespan)

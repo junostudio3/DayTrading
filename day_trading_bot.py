@@ -1,10 +1,8 @@
 from kis_auth import KisAuth
 from kis_auth_order import OrderCheckResult
-from KisKey import app_account
-from KisKey import app_domain
-from KisKey import app_is_virtual
-from KisKey import app_key
-from KisKey import app_secret
+from kis_user import KisUser
+from kis_user import KisUserManager
+from KisKey import get_kis_user_manager
 from info_kosdaq import load_kosdaq_master
 from info_kospi import load_kospi_master
 from price_analysis import PriceAnalysis
@@ -37,10 +35,13 @@ class DayTradingBot:
     def __init__(self):
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
         self.log = print
+        self.trade_log = None
 
-        self.auth = KisAuth(app_key, app_secret, app_account, app_is_virtual, app_domain)
-        self.auth.account.update()
+        self.user_manager: KisUserManager = get_kis_user_manager(self.log)
+        if len(self.user_manager.users) == 0:
+            raise ValueError("사용자 정보가 없습니다. KisKey.py 파일을 확인해주세요.")
 
+        self.auth = self.user_manager.users[0].auth
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
@@ -63,6 +64,13 @@ class DayTradingBot:
 
         self._update_snapshot_collect_candidates()
         self.update_sell_list()
+
+    def set_logger(self, log):
+        self.log = log
+        self.user_manager.set_logger(log)
+
+    def set_trade_logger(self, log):
+        self.trade_log = log
 
     def run(self):
         self.display_account_info()
