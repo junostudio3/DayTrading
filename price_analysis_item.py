@@ -278,6 +278,27 @@ class PriceAnalysisItem:
             if closes[-11] > 0:
                 result["Momentum"] = round(((closes[-1] - closes[-11]) / closes[-11]) * 100, 2)
 
+        # 당일 VWAP(거래량 가중 평균 가격) 및 괴리율 계산
+        if len(candles) > 0:
+            last_time = time.localtime(candles[-1].start_time)
+            target_yday = last_time.tm_yday
+            target_year = last_time.tm_year
+            
+            cum_vol = 0
+            cum_pv = 0
+            for c in reversed(candles):
+                c_time = time.localtime(c.start_time)
+                if c_time.tm_yday != target_yday or c_time.tm_year != target_year:
+                    break
+                cum_vol += c.volume
+                cum_pv += c.close_price * c.volume
+                
+            vwap = cum_pv / cum_vol if cum_vol > 0 else None
+            
+            if vwap is not None:
+                result["VWAP"] = round(vwap, 2)
+                result["VWAP_Gap"] = round(((closes[-1] - vwap) / vwap) * 100, 2)
+
         return result
 
     # 구매 추세 조건    

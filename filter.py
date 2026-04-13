@@ -28,7 +28,7 @@ class TradingParams:
     # ── 마감 시간 ──
     FORCE_SELL_HOUR = 15            # 이 시(hour) 이후 무조건 매도
     PURCHASE_OVERTIME_HOUR = 14     # 매수 중단 시(hour)
-    PURCHASE_OVERTIME_MIN = 50      # 매수 중단 분(min)
+    PURCHASE_OVERTIME_MIN = 20      # 매수 중단 분(min) [2026-04-13 50->20 변경]
 
     # ── 주문 타이밍 ──
     BUY_ORDER_TIMEOUT_SECONDS = 120     # 매수 주문 체결 대기 시간(초)
