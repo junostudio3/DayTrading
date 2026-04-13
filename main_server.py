@@ -127,7 +127,7 @@ async def get_snapshot():
 async def get_candles(pdno: str):
     if not engine:
         raise HTTPException(status_code=503, detail="TradingEngine not initialized")
-    item = engine.bot.price_analysis.items.get(pdno)
+    item = engine.bot.price_analysis_items(pdno)
     if not item or not item.candle_stick_5minute:
         return []
     

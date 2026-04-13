@@ -62,13 +62,19 @@ class DayTradingBot:
             bot.set_trade_logger(log)
 
     def run(self):
-        for bot in self.bots:
+        for bot in self.bots.values():
             bot.run()
 
     def process_once(self, app_id: str):
         bot = self.bots.get(app_id)
         if bot:
             bot.process_once()
+
+    def price_analysis_items(self, pdno: str):
+        bot = self.bots.get(self.user_manager.users[0].app_id)
+        if bot and pdno in bot.price_analysis.items:
+            return bot.price_analysis.items[pdno]
+        return None
 
     def place_manual_buy(self, app_id: str, pdno: str, quantity: int):
         bot = self.bots.get(app_id)
