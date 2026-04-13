@@ -64,16 +64,17 @@ class TradingEngine:
             except queue.Empty:
                 break
 
+            app_id = self.bot.user_manager.users[0].app_id
             side = order.get("side", "")
             pdno = order.get("pdno", "")
             quantity = int(order.get("quantity", 0))
 
             try:
                 if side == "buy":
-                    self.bot.place_manual_buy(pdno, quantity)
+                    self.bot.place_manual_buy(app_id, pdno, quantity)
                     self._append_log(f"수동 매수 완료: {pdno}, 수량 {quantity}")
                 elif side == "sell":
-                    self.bot.place_manual_sell(pdno, quantity)
+                    self.bot.place_manual_sell(app_id, pdno, quantity)
                     self._append_log(f"수동 매도 완료: {pdno}, 수량 {quantity}")
                 else:
                     self._append_log(f"알 수 없는 주문 타입: {side}")
@@ -85,8 +86,9 @@ class TradingEngine:
         while not self._stop_event.is_set():
             try:
                 self._process_orders()
-                self.bot.process_once()
-                snapshot = self.bot.get_dashboard_snapshot()
+                app_id = self.bot.user_manager.users[0].app_id
+                self.bot.process_once(app_id)
+                snapshot = self.bot.get_dashboard_snapshot(app_id)
                 snapshot["logs"] = self._logs[-100:]
                 snapshot["trade_logs"] = self._trade_logs[-100:]
                 with self._snapshot_lock:

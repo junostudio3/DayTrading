@@ -41,7 +41,57 @@ class DayTradingBot:
         if len(self.user_manager.users) == 0:
             raise ValueError("사용자 정보가 없습니다. KisKey.py 파일을 확인해주세요.")
 
-        self.auth = self.user_manager.users[0].auth
+        self.bots: dict[str, DayTradingSingleBot] = {}
+        for user in self.user_manager.users:
+            try:
+                bot = DayTradingSingleBot(user, self.log, self.trade_log)
+                self.bots[user.app_id] = bot
+            except Exception as e:
+                self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
+                continue
+    
+    def set_logger(self, log):
+        self.log = log
+        self.user_manager.set_logger(log)
+        for bot in self.bots.values():
+            bot.set_logger(log)
+
+    def set_trade_logger(self, log):
+        self.trade_log = log
+        for bot in self.bots.values():
+            bot.set_trade_logger(log)
+
+    def run(self):
+        for bot in self.bots:
+            bot.run()
+
+    def process_once(self, app_id: str):
+        bot = self.bots.get(app_id)
+        if bot:
+            bot.process_once()
+
+    def place_manual_buy(self, app_id: str, pdno: str, quantity: int):
+        bot = self.bots.get(app_id)
+        if bot:
+            return bot.place_manual_buy(pdno, quantity)
+        
+    def place_manual_sell(self, app_id: str, pdno: str, quantity: int):
+        bot = self.bots.get(app_id)
+        if bot:
+            return bot.place_manual_sell(pdno, quantity)
+
+    def get_dashboard_snapshot(self, app_id: str) -> Optional[dict]:
+        bot = self.bots.get(app_id)
+        if bot:
+            return bot.get_dashboard_snapshot()
+        return None
+
+
+class DayTradingSingleBot:
+    def __init__(self, user: KisUser, log, trade_log):
+        self.log = log
+        self.trade_log = trade_log
+        self.auth = user.auth
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
@@ -67,18 +117,17 @@ class DayTradingBot:
 
     def set_logger(self, log):
         self.log = log
-        self.user_manager.set_logger(log)
 
     def set_trade_logger(self, log):
         self.trade_log = log
 
     def run(self):
-        self.display_account_info()
+        self._display_account_info()
         while True:
             self.process_once()
             time.sleep(1)
 
-    def display_account_info(self):
+    def _display_account_info(self):
         self.log(f"예수금: {self.auth.account.balance.dnca_tot_amt}")
         self.log(f"D+1 예수금: {self.auth.account.balance.nxdy_excc_amt}")
         self.log(f"D+2 예수금: {self.auth.account.balance.prvs_rcdl_excc_amt}")
@@ -89,7 +138,7 @@ class DayTradingBot:
             for stock in self.auth.account.stocks:
                 self.log(f"종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
-    def update_price(self, symbol_item: SymbolItem, now: Optional[float] = None, force: bool = False) -> Optional[float]:
+    def _update_price(self, symbol_item: SymbolItem, now: Optional[float] = None, force: bool = False) -> Optional[float]:
         """단일 종목의 현재가 조회"""
         if now is None:
             now = time.time()
@@ -462,7 +511,7 @@ class DayTradingBot:
             state = self._get_trade_state(pdno)
 
             # 모든 step: 현재가 조회 및 분석(update_price)
-            self.update_price(symbol_item, now)
+            self._update_price(symbol_item, now)
             step = state.step
 
             if step == TradeStep.JUDGE_STEP:
