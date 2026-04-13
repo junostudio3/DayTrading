@@ -12,9 +12,8 @@ from day_trading_bot import DayTradingBot
 class TradingEngine:
     def __init__(self, bot: DayTradingBot, interval_seconds: int = 1):
         self.bot = bot
-        # hook engine logging into the bot so that any message the bot emits
-        # via its `log` attribute will be funneled through _append_log.
-        # This allows automated orders from the bot to appear in engine logs.
+        # 엔진에서 발생하는 모든 로그 메시지가 _append_log를 통해 처리되도록 봇의 log 속성을 후킹합니다.
+        # 이렇게 하면 봇에서 발생하는 자동 주문 관련 메시지도 엔진 로그에 나타나게 됩니다.
         self.bot.set_logger(self._append_log)
         self.bot.set_trade_logger(self._append_trade_log)
 
@@ -57,14 +56,13 @@ class TradingEngine:
         if len(self._trade_logs) > 300:
             self._trade_logs = self._trade_logs[-300:]
 
-    def _process_orders(self):
+    def _process_orders(self, app_id: str):
         while True:
             try:
                 order = self._order_queue.get_nowait()
             except queue.Empty:
                 break
 
-            app_id = self.bot.user_manager.users[0].app_id
             side = order.get("side", "")
             pdno = order.get("pdno", "")
             quantity = int(order.get("quantity", 0))
@@ -83,10 +81,18 @@ class TradingEngine:
 
     def _run_loop(self):
         self._append_log("거래 엔진 시작")
+        user_app_id_list = self.bot.get_user_app_ids()
+        if len(user_app_id_list) == 0:
+            self._append_log("경고: 등록된 사용자 앱이 없습니다. 엔진이 정상적으로 작동하려면 최소한 하나의 사용자 앱이 필요합니다.")
+            return
+
+        user_index = 0
+
         while not self._stop_event.is_set():
+            app_id = user_app_id_list[user_index]
+
             try:
-                self._process_orders()
-                app_id = self.bot.user_manager.users[0].app_id
+                self._process_orders(app_id)
                 self.bot.process_once(app_id)
                 snapshot = self.bot.get_dashboard_snapshot(app_id)
                 snapshot["logs"] = self._logs[-100:]
@@ -114,5 +120,8 @@ class TradingEngine:
                 if self._stop_event.is_set():
                     break
                 time.sleep(0.1)
+            
+            # 다음 사용자로 넘어감
+            user_index = (user_index + 1) % len(user_app_id_list)
 
         self._append_log("거래 엔진 종료")

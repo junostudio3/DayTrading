@@ -19,7 +19,6 @@ class InterestStockManager:
     def __init__(self, cache_file_path: str = "./cache/interest_stocks.json"):
         self.cache_file_path = cache_file_path
         self.buy_list: List[InterestStockItem] = []
-        self.initial_scan_done: bool = False
         self.load()
 
     def load(self):
@@ -38,12 +37,9 @@ class InterestStockManager:
                         if self.is_avoided(pdno, prdt_name, price, volume):
                             continue
                         self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, added_at))
-
-                    self.initial_scan_done = data.get("initial_scan_done", False)
             except Exception as e:
                 print(f"Failed to load interest stocks from {self.cache_file_path}: {e}")
                 self.buy_list = []
-                self.initial_scan_done = False
 
         # 로드 시 만료된 종목 자동 제거
         self._purge_expired()
@@ -63,8 +59,7 @@ class InterestStockManager:
                         "added_at": "" if item.added_at is None else item.added_at
                     }
                     for item in self.buy_list
-                ],
-                "initial_scan_done": self.initial_scan_done
+                ]
             }
             with open(self.cache_file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
@@ -73,7 +68,6 @@ class InterestStockManager:
 
     def clear(self):
         self.buy_list = []
-        self.initial_scan_done = False
         self.save()
 
     def _count_trading_days(self, from_ts: float, to_ts: float) -> int:
@@ -148,10 +142,6 @@ class InterestStockManager:
         self.save()
 
         return True
-
-    def mark_initial_scan_done(self):
-        self.initial_scan_done = True
-        self.save()
 
     def get_stocks(self) -> List[SymbolItem]:
         return [item.stock for item in self.buy_list]

@@ -49,7 +49,10 @@ class DayTradingBot:
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
-    
+
+    def get_user_app_ids(self) -> List[str]:
+        return [user.app_id for user in self.user_manager.users]
+
     def set_logger(self, log):
         self.log = log
         self.user_manager.set_logger(log)
@@ -61,9 +64,9 @@ class DayTradingBot:
         for bot in self.bots.values():
             bot.set_trade_logger(log)
 
-    def run(self):
+    def display_account_info(self):
         for bot in self.bots.values():
-            bot.run()
+            bot.display_account_info()
 
     def process_once(self, app_id: str):
         bot = self.bots.get(app_id)
@@ -102,11 +105,6 @@ class DayTradingSingleBot:
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
 
-        if not self.interest_stock_manager.initial_scan_done:
-            # 초기 스캔 전에는 symbol_snapshot_cache에서 종목을 주입한다.
-            for snap_shot in self.symbol_snapshot_cache.get_all_snapshots():
-                self.interest_stock_manager.update_stock(snap_shot.symbol.pdno, snap_shot.symbol.prdt_name, snap_shot.price, snap_shot.volume)
-
         self.loop_count = 0
         self.is_running = True
         self._snapshot_toggle = False
@@ -127,13 +125,7 @@ class DayTradingSingleBot:
     def set_trade_logger(self, log):
         self.trade_log = log
 
-    def run(self):
-        self._display_account_info()
-        while True:
-            self.process_once()
-            time.sleep(1)
-
-    def _display_account_info(self):
+    def display_account_info(self):
         self.log(f"예수금: {self.auth.account.balance.dnca_tot_amt}")
         self.log(f"D+1 예수금: {self.auth.account.balance.nxdy_excc_amt}")
         self.log(f"D+2 예수금: {self.auth.account.balance.prvs_rcdl_excc_amt}")
@@ -221,7 +213,6 @@ class DayTradingSingleBot:
             # 한번씩은 모든 종목을 탐색했다.
             # 모든 데이터가 symbol_snapshot_cache에 저장되어 있을 것이다
             # 이제부터는 거래량 우선과 가장 오래된 종목을 번갈아 가며 30분 TTL이 지난 종목을 갱신한다.
-            self.interest_stock_manager.mark_initial_scan_done()
             if self._snapshot_toggle:
                 symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol(min_age_seconds=1800)
             else:
@@ -742,4 +733,10 @@ class DayTradingSingleBot:
 
 if __name__ == "__main__":
     bot = DayTradingBot()
-    bot.run()
+    bot.display_account_info()
+    user_app_ids = bot.get_user_app_ids()
+    while True:
+        for app_id in user_app_ids:
+            bot.process_once(app_id)
+            time.sleep(1)
+
