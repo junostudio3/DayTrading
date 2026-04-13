@@ -292,10 +292,19 @@ class DayTradingBot:
         if not state.buy_order_no:
             state.buy_order_requested_at = 0.0
             state.step = TradeStep.DECIDE_ON_PURCHASE
-            self._symbol_log(symbol_item, "매수 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
+            self.trade_reporter.add(TradeType.UNKNOWN_ERROR, symbol_item, 0, 0, "매수 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
             return
 
-        if (
+        check_order_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
+
+        if check_order_result is not None and check_order_result.rmn_qty == 0:
+            # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
+            self.update_account_stock()
+            state.buy_order_no = ""
+            state.buy_order_requested_at = 0.0
+            self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매수 체결 로그 추가
+            state.step = TradeStep.DECIDE_ON_SELL
+        elif (
             state.buy_order_requested_at > 0
             and (time.time() - state.buy_order_requested_at) > self.BUY_ORDER_TIMEOUT_SECONDS
         ):
@@ -314,16 +323,6 @@ class DayTradingBot:
             except Exception as e:
                 self._symbol_log(symbol_item, f"매수 주문 체결 대기가 {self.BUY_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
-
-        check_order_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
-
-        if check_order_result is not None and check_order_result.rmn_qty == 0:
-            # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
-            self.update_account_stock()
-            state.buy_order_no = ""
-            state.buy_order_requested_at = 0.0
-            self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매수 체결 로그 추가
-            state.step = TradeStep.DECIDE_ON_SELL
 
     def _process_order_sell(self, symbol_item: SymbolItem):
         pdno = symbol_item.pdno
@@ -367,11 +366,23 @@ class DayTradingBot:
         state = self._get_trade_state(pdno)
         if not state.sell_order_no:
             state.sell_order_requested_at = 0.0
-            state.step = TradeStep.DECIDE_ON_PURCHASE
-            self._symbol_log(symbol_item, "매도 체크하려 했으나 주문 번호가 없습니다. 매수 주문 단계로 이동합니다.")
+            state.step = TradeStep.DECIDE_ON_SELL
+            self.trade_reporter.add(TradeType.UNKNOWN_ERROR, symbol_item, 0, 0, "매도 체크하려 했으나 주문 번호가 없습니다. 매도 주문 단계로 이동합니다.")
             return
 
-        if (
+        check_order_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
+
+        if check_order_result is not None and check_order_result.rmn_qty == 0:
+            # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
+            self.update_account_stock()
+
+            state.sell_order_no = ""
+            state.sell_order_requested_at = 0.0
+            self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
+            # 매도 후 해당 종목의 재진입을 금지하여 잦은 휩쏘로 인한 뇌동매매를 강도높게 방지한다.
+            state.cooldown_until = time.time() + TradingParams.COOLDOWN_AFTER_SELL
+            state.step = TradeStep.DECIDE_ON_PURCHASE
+        elif (
             state.sell_order_requested_at > 0
             and (time.time() - state.sell_order_requested_at) > self.SELL_ORDER_TIMEOUT_SECONDS
         ):
@@ -388,21 +399,7 @@ class DayTradingBot:
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
                 self._symbol_log(symbol_item, f"매도 주문 체결 대기가 {self.SELL_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
-            return
-        
-        check_order_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
-
-        if check_order_result is not None and check_order_result.rmn_qty == 0:
-            # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
-            self.update_account_stock()
-
-            state.sell_order_no = ""
-            state.sell_order_requested_at = 0.0
-            self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
-            # 매도 후 해당 종목의 재진입을 금지하여 잦은 휩쏘로 인한 뇌동매매를 강도높게 방지한다.
-            state.cooldown_until = time.time() + TradingParams.COOLDOWN_AFTER_SELL
-            state.step = TradeStep.DECIDE_ON_PURCHASE
-            
+            return            
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:

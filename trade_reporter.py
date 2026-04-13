@@ -14,6 +14,7 @@ class TradeType(Enum):
     IMMEDIATE_SELL = auto()
     SELL_CANCELLED = auto()
     SELL_COMPLETED = auto()
+    UNKNOWN_ERROR = auto()
 
     def get_kr_text(self):
         if self == TradeType.BUY:
@@ -30,6 +31,8 @@ class TradeType(Enum):
             return "매도 주문 취소"
         elif self == TradeType.SELL_COMPLETED:
             return "매도 체결"
+        elif self == TradeType.UNKNOWN_ERROR:
+            return "알 수 없는 거래 오류"
         else:
             return "알 수 없는 거래 유형"
 
