@@ -36,6 +36,10 @@ class DayTradingBot:
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
         self.log = print
         self.trade_log = None
+        self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
+        self.snapshot_collect_candidates: list[SymbolItem] = []
+        self._snapshot_toggle = False
+        self._update_snapshot_collect_candidates()
 
         self.user_manager: KisUserManager = get_kis_user_manager(self.log)
         if len(self.user_manager.users) == 0:
@@ -44,7 +48,7 @@ class DayTradingBot:
         self.bots: dict[str, DayTradingSingleBot] = {}
         for user in self.user_manager.users:
             try:
-                bot = DayTradingSingleBot(user, self.log, self.trade_log)
+                bot = DayTradingSingleBot(self, user)
                 self.bots[user.app_id] = bot
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
@@ -95,28 +99,93 @@ class DayTradingBot:
             return bot.get_dashboard_snapshot()
         return None
 
+    def update_interest_stock_manager(self, now: float):
+        # 8시부터 4시 30분 사이에만 관심 종목을 탐색한다.
+        # 미리 준비하는 목적이어서 장 시작 조금 전부터 탐색을 시작한다.
+        current_time = time.localtime(now)
+        if current_time.tm_hour < 8 or (current_time.tm_hour == 16 and current_time.tm_min > 30) or current_time.tm_hour > 16:
+            return
+
+        if len(self.snapshot_collect_candidates) == 0:
+            # 한번씩은 모든 종목을 탐색했다.
+            # 모든 데이터가 symbol_snapshot_cache에 저장되어 있을 것이다
+            # 이제부터는 거래량 우선과 가장 오래된 종목을 번갈아 가며 30분 TTL이 지난 종목을 갱신한다.
+            if self._snapshot_toggle:
+                symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol(min_age_seconds=1800)
+            else:
+                symbol_item = self.symbol_snapshot_cache.get_high_volume_stale_symbol(min_age_seconds=1800)
+            self._snapshot_toggle = not self._snapshot_toggle
+        else:
+            symbol_item = self.snapshot_collect_candidates.pop(0)
+
+        if symbol_item is None:
+            return
+
+        pdno = symbol_item.pdno
+        name = symbol_item.prdt_name
+        if not pdno:
+            return
+
+        try:
+            # 관심 종목의 전일 종가와 거래량을 조회하여 관심 종목 리스트를 업데이트한다.
+            # 탐색은 누가 해도 같으므로 첫번째 사용자의 인증 정보로 조회한다.
+            first_bot = self.bots.get(self.user_manager.users[0].app_id)
+            price, volume = first_bot.auth.price.get_previous_day_price_and_volume(pdno)
+
+            if price is None or volume is None:
+                return
+
+            price = int(price)
+            volume = int(volume)
+        except Exception as e:
+            self.log(f"관심 종목 탐색 중 오류가 발생했습니다. pdno: {pdno} name: {name} error: {e}")
+            return
+        
+        # 스냅샷 캐시 갱신 (TTL 타임스탬프 업데이트)
+        snapshot = SymbolSnapshot(symbol_item, now, price, volume)
+        self.symbol_snapshot_cache.add_snapshot(snapshot)
+
+        for bot in self.bots.values():
+            if bot.interest_stock_manager.update_stock(pdno, name, price, volume):
+                bot.update_sell_list()
+       
+    def _update_snapshot_collect_candidates(self):
+        self.snapshot_collect_candidates: list[SymbolItem] = []
+        kosdq_records = load_kosdaq_master()
+        kospi_records = load_kospi_master()
+        all_records = kospi_records + kosdq_records
+
+        self.log(f"kospi와 kosdaq 항목을 조사하여 관심 종목 스냅샷 수집 후보 리스트를 업데이트합니다. (count={len(all_records)})")
+
+        for record in all_records:
+            pdno = getattr(record, 'mksc_shrn_iscd', '')
+            name = getattr(record, 'hts_kor_isnm', '')
+
+            if self.symbol_snapshot_cache.is_exists(pdno):
+                # 이미 캐시에 존재하는 심볼은 스냅샷 수집 후보에서 제외한다.
+                continue
+
+            stock_item = SymbolItem(pdno, name)
+            self.snapshot_collect_candidates.append(stock_item)
 
 class DayTradingSingleBot:
-    def __init__(self, user: KisUser, log, trade_log):
-        self.log = log
-        self.trade_log = trade_log
+    def __init__(self, parent, user: KisUser):
+        self.parent = parent
+        self.log = parent.log
+        self.trade_log = parent.trade_log
         self.auth = user.auth
-        self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
 
         self.loop_count = 0
         self.is_running = True
-        self._snapshot_toggle = False
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
         self.monitor_list: list[SymbolItem] = []
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
-        self.snapshot_collect_candidates: list[SymbolItem] = []
         self.trade_reporter = TradeReporter(self)
 
-        self._update_snapshot_collect_candidates()
         self.update_sell_list()
 
     def set_logger(self, log):
@@ -175,25 +244,6 @@ class DayTradingSingleBot:
             # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
             print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {candle.close_price} / 거래량: {candle.volume}")
 
-    def _update_snapshot_collect_candidates(self):
-        self.snapshot_collect_candidates: list[SymbolItem] = []
-        kosdq_records = load_kosdaq_master()
-        kospi_records = load_kospi_master()
-        all_records = kospi_records + kosdq_records
-
-        self.log(f"kospi와 kosdaq 항목을 조사하여 관심 종목 스냅샷 수집 후보 리스트를 업데이트합니다. (count={len(all_records)})")
-
-        for record in all_records:
-            pdno = getattr(record, 'mksc_shrn_iscd', '')
-            name = getattr(record, 'hts_kor_isnm', '')
-
-            if self.symbol_snapshot_cache.is_exists(pdno):
-                # 이미 캐시에 존재하는 심볼은 스냅샷 수집 후보에서 제외한다.
-                continue
-
-            stock_item = SymbolItem(pdno, name)
-            self.snapshot_collect_candidates.append(stock_item)
-
     def _find_inventory(self, pdno: str):
         return self.auth.account.stocks_by_pdno.get(pdno)
 
@@ -202,58 +252,6 @@ class DayTradingSingleBot:
             self.pdno_states[pdno] = TradeState()
         return self.pdno_states[pdno]
     
-    def _collect_interest_stocks(self, now: float):
-        # 8시부터 4시 30분 사이에만 관심 종목을 탐색한다.
-        # 미리 준비하는 목적이어서 장 시작 조금 전부터 탐색을 시작한다.
-        current_time = time.localtime(now)
-        if current_time.tm_hour < 8 or (current_time.tm_hour == 16 and current_time.tm_min > 30) or current_time.tm_hour > 16:
-            return
-
-        if len(self.snapshot_collect_candidates) == 0:
-            # 한번씩은 모든 종목을 탐색했다.
-            # 모든 데이터가 symbol_snapshot_cache에 저장되어 있을 것이다
-            # 이제부터는 거래량 우선과 가장 오래된 종목을 번갈아 가며 30분 TTL이 지난 종목을 갱신한다.
-            if self._snapshot_toggle:
-                symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol(min_age_seconds=1800)
-            else:
-                symbol_item = self.symbol_snapshot_cache.get_high_volume_stale_symbol(min_age_seconds=1800)
-            self._snapshot_toggle = not self._snapshot_toggle
-        else:
-            symbol_item = self.snapshot_collect_candidates.pop(0)
-
-        if symbol_item is None:
-            return
-
-        pdno = symbol_item.pdno
-        name = symbol_item.prdt_name
-        
-        if not pdno:
-            return
-        
-        changed_list = False
-
-        try:
-            # 관심 종목의 전일 종가와 거래량을 조회하여 관심 종목 리스트를 업데이트한다.
-            price, volume = self.auth.price.get_previous_day_price_and_volume(pdno)
-            
-            if price is not None and volume is not None:
-                price = int(price)
-                volume = int(volume)
-
-                # 스냅샷 캐시 갱신 (TTL 타임스탬프 업데이트)
-                snapshot = SymbolSnapshot(symbol_item, now, price, volume)
-                self.symbol_snapshot_cache.add_snapshot(snapshot)
-
-                changed_list |= self.interest_stock_manager.update_stock(pdno, name, price, volume)
-
-        except Exception as e:
-            self.log(f"관심 종목 탐색 중 오류가 발생했습니다. pdno: {pdno} name: {name} error: {e}")
-            pass
-
-        # 관심 종목은 매수 할 수 있으므로 매도 리스트에도 추가한다.
-        if changed_list:
-            self.update_sell_list()
-
     def _symbol_log(self, symbol_item: SymbolItem, message: str):
         pdno = symbol_item.pdno
         name = symbol_item.prdt_name
@@ -478,8 +476,6 @@ class DayTradingSingleBot:
          - 장이 시작되면, _process_step 함수를 호출하여 매매 로직을 실행한다.
         '''
         now = time.time()
-
-        self._collect_interest_stocks(now)
 
         if not self.is_market_open(now):
             if self.is_running:
@@ -736,6 +732,9 @@ if __name__ == "__main__":
     bot.display_account_info()
     user_app_ids = bot.get_user_app_ids()
     while True:
+        now = time.time()
+        bot.update_interest_stock_manager(now)
+
         for app_id in user_app_ids:
             bot.process_once(app_id)
             time.sleep(1)
