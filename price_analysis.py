@@ -5,11 +5,10 @@ from candlestick import Candlestick
 from common_structure import SymbolItem
 
 class PriceAnalysis:
-    def __init__(self, cache_file):
+    def __init__(self, cache_dir):
         # cache_file originally pointed to a json file; we treat its dirname as
         # the directory that will contain per-pdno databases.
-        self.cache_file = cache_file
-        self.cache_dir = os.path.dirname(cache_file) or "."
+        self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
 
         self.items: dict[str, PriceAnalysisItem] = {}

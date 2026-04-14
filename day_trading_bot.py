@@ -37,7 +37,7 @@ class DayTradingBot:
         self.log = print
         self.trade_log = None
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
-        self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
+        self.price_analysis = PriceAnalysis("./cache")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
