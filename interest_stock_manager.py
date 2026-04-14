@@ -16,7 +16,7 @@ class InterestStockItem:
 
 
 class InterestStockManager:
-    def __init__(self, cache_file_path: str = "./cache/interest_stocks.json"):
+    def __init__(self, cache_file_path: str):
         self.cache_file_path = cache_file_path
         self.buy_list: List[InterestStockItem] = []
         self.load()

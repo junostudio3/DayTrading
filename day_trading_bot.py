@@ -38,6 +38,7 @@ class DayTradingBot:
         self.trade_log = None
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
+        self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
 
@@ -148,8 +149,8 @@ class DayTradingBot:
         snapshot = SymbolSnapshot(symbol_item, now, price, volume)
         self.symbol_snapshot_cache.add_snapshot(snapshot)
 
-        for bot in self.bots.values():
-            if bot.interest_stock_manager.update_stock(pdno, name, price, volume):
+        if self.interest_stock_manager.update_stock(pdno, name, price, volume):
+            for bot in self.bots.values():
                 bot.update_sell_list()
 
     def update_market_data(self, now: float):
@@ -231,7 +232,6 @@ class DayTradingSingleBot:
         self.log = parent.log
         self.trade_log = parent.trade_log
         self.auth = user.auth
-        self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
 
         self.loop_count = 0
         self.is_running = True
@@ -655,7 +655,7 @@ class DayTradingSingleBot:
         monitor_pdnos = set()
 
         # 먼저 관심종목들을 모니터링 리스트에 추가
-        for stock in self.interest_stock_manager.get_stocks():
+        for stock in self.parent.interest_stock_manager.get_stocks():
             self.monitor_list.append(stock)
             monitor_pdnos.add(stock.pdno)
 
