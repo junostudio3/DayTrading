@@ -21,7 +21,7 @@ class TradingEngine:
         self._stop_event = threading.Event()
         self._order_queue: queue.Queue[dict[str, Any]] = queue.Queue()
         self._snapshot_lock = threading.Lock()
-        self._latest_snapshot: dict[str, Any] = {}
+        self._latest_snapshots: dict[str, dict[str, Any]] = {}
         self._logs: list[str] = []
         self._trade_logs: list[str] = []
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
@@ -37,12 +37,15 @@ class TradingEngine:
             self._thread.join(timeout=3)
 
 
-    def submit_order(self, side: str, pdno: str, quantity: int):
-        self._order_queue.put({"side": side, "pdno": pdno, "quantity": quantity})
+    def get_user_ids(self) -> list[str]:
+        return self.bot.get_user_app_ids()
 
-    def get_snapshot(self) -> dict[str, Any]:
+    def submit_order(self, app_id: str, side: str, pdno: str, quantity: int):
+        self._order_queue.put({"app_id": app_id, "side": side, "pdno": pdno, "quantity": quantity})
+
+    def get_snapshot(self, app_id: str) -> dict[str, Any]:
         with self._snapshot_lock:
-            return copy.deepcopy(self._latest_snapshot)
+            return copy.deepcopy(self._latest_snapshots.get(app_id, {}))
 
     def _append_log(self, message: str):
         timestamp = time.strftime("%H:%M:%S")
@@ -56,13 +59,14 @@ class TradingEngine:
         if len(self._trade_logs) > 300:
             self._trade_logs = self._trade_logs[-300:]
 
-    def _process_orders(self, app_id: str):
+    def _process_orders(self):
         while True:
             try:
                 order = self._order_queue.get_nowait()
             except queue.Empty:
                 break
 
+            app_id = order.get("app_id", "")
             side = order.get("side", "")
             pdno = order.get("pdno", "")
             quantity = int(order.get("quantity", 0))
@@ -70,14 +74,14 @@ class TradingEngine:
             try:
                 if side == "buy":
                     self.bot.place_manual_buy(app_id, pdno, quantity)
-                    self._append_log(f"수동 매수 완료: {pdno}, 수량 {quantity}")
+                    self._append_log(f"[{app_id}] 수동 매수 완료: {pdno}, 수량 {quantity}")
                 elif side == "sell":
                     self.bot.place_manual_sell(app_id, pdno, quantity)
-                    self._append_log(f"수동 매도 완료: {pdno}, 수량 {quantity}")
+                    self._append_log(f"[{app_id}] 수동 매도 완료: {pdno}, 수량 {quantity}")
                 else:
                     self._append_log(f"알 수 없는 주문 타입: {side}")
             except Exception as e:
-                self._append_log(f"주문 실패: {pdno} / {e}")
+                self._append_log(f"[{app_id}] 주문 실패: {pdno} / {e}")
 
     def _run_loop(self):
         self._append_log("거래 엔진 시작")
@@ -92,7 +96,7 @@ class TradingEngine:
             app_id = user_app_id_list[user_index]
 
             try:
-                self._process_orders(app_id)
+                self._process_orders()
                 if user_index == 0:
                     now = time.time()
                     self.bot.update_market_data(now)
@@ -103,7 +107,7 @@ class TradingEngine:
                 snapshot["logs"] = self._logs[-100:]
                 snapshot["trade_logs"] = self._trade_logs[-100:]
                 with self._snapshot_lock:
-                    self._latest_snapshot = snapshot
+                    self._latest_snapshots[app_id] = snapshot
             except Exception as e:
                 err_msg = f"엔진 오류: {e}"
                 self._append_log(err_msg)

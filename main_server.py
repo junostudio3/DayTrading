@@ -20,7 +20,7 @@ if DEBUG_PORT:
         print(f"[WARNING] Failed to start debugpy: {e}")
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -112,16 +112,23 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 class OrderRequest(BaseModel):
+    app_id: str
     side: str
     pdno: str
     quantity: int
 
 
-@app.get("/snapshot")
-async def get_snapshot():
+@app.get("/users")
+async def get_users():
     if not engine:
         raise HTTPException(status_code=503, detail="TradingEngine not initialized")
-    return engine.get_snapshot()
+    return engine.get_user_ids()
+
+@app.get("/snapshot")
+async def get_snapshot(app_id: str = Query(..., description="User app ID")):
+    if not engine:
+        raise HTTPException(status_code=503, detail="TradingEngine not initialized")
+    return engine.get_snapshot(app_id)
 
 @app.get("/candles/{pdno}")
 async def get_candles(pdno: str):
@@ -148,7 +155,7 @@ async def submit_order(order: OrderRequest):
     if order.side not in ("buy", "sell"):
         raise HTTPException(status_code=400, detail="Invalid side. Must be 'buy' or 'sell'")
     
-    engine.submit_order(side=order.side, pdno=order.pdno, quantity=order.quantity)
+    engine.submit_order(app_id=order.app_id, side=order.side, pdno=order.pdno, quantity=order.quantity)
     return {"status": "ok", "message": f"{order.side} command submitted for {order.pdno} ({order.quantity})"}
 
 

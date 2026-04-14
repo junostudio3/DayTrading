@@ -155,6 +155,14 @@ class DayTradingBot:
 
     def update_market_data(self, now: float):
         # 모든 봇의 모니터링 리스트에서 중복을 제거한 관심 종목을 추출
+        # 이것들의 현재가를 업데이트한다. 업데이트된 가격은 price_analysis에 저장된다.
+
+        current_time = time.localtime(now)
+        # 현재가를 업데이트하는 것은 장이 열려있는 시간에만 의미가 있다.
+        # 따라서 장이 열려있는 시간에만 가격 업데이트를 한다. (9:00 ~ 15:30)
+        if current_time.tm_hour < 9 or (current_time.tm_hour == 15 and current_time.tm_min > 30) or current_time.tm_hour > 15:
+            return
+
         monitor_dict: dict[str, SymbolItem] = {}
         for bot in self.bots.values():
             for item in bot.monitor_list:

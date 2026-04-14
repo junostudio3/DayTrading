@@ -8,7 +8,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Static, TabbedContent, TabPane
+from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Select, Static, TabbedContent, TabPane
 
 API_BASE_URL = "http://127.0.0.1:1530"
 
@@ -45,6 +45,7 @@ class DayTradingTUI(App):
     BINDINGS = [
         Binding("b", "buy", "매수"),
         Binding("s", "sell", "매도"),
+        Binding("u", "next_user", "다음유저"),
         Binding("q", "quit", "종료"),
     ]
 
@@ -53,10 +54,21 @@ class DayTradingTUI(App):
         layout: vertical;
     }
 
-    #summary {
-        height: 4;
-        border: solid #666666;
+    #top-bar {
+        height: 5;
         margin: 0 0 1 0;
+    }
+
+    #user-select {
+        width: 28;
+        height: 100%;
+        border: solid #666666;
+    }
+
+    #summary {
+        height: 100%;
+        width: 1fr;
+        border: solid #666666;
     }
 
     #tables {
@@ -111,6 +123,8 @@ class DayTradingTUI(App):
         super().__init__()
         # 디버거 일시정지 시 짧은 타임아웃으로 인한 오탐을 줄인다.
         self.client = httpx.AsyncClient(base_url=API_BASE_URL, timeout=10.0)
+        self._user_ids: list[str] = []
+        self._selected_user_id: str | None = None
         self._watch_pdnos: list[str] = []
         self._holding_pdnos: list[str] = []
         self._rendered_log_sizes = {
@@ -123,7 +137,9 @@ class DayTradingTUI(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield Static("로딩 중...", id="summary")
+        with Horizontal(id="top-bar"):
+            yield Select([], id="user-select", prompt="유저 로딩 중...")
+            yield Static("로딩 중...", id="summary")
         with Horizontal(id="tables"):
             with TabbedContent(initial="holdings-pane", id="left-tabs"):
                 with TabPane("보유주식", id="holdings-pane"):
@@ -149,6 +165,45 @@ class DayTradingTUI(App):
         watch.add_columns("종목", "이름", "현재가", "캔들수", "체결량", "진행")
 
         self.set_interval(1.0, self.refresh_dashboard)
+        self.call_after_refresh(self._fetch_users)
+
+    @on(Select.Changed, "#user-select")
+    def on_user_select_changed(self, event: Select.Changed) -> None:
+        if event.value is Select.BLANK:
+            return
+        new_id = str(event.value)
+        if new_id != self._selected_user_id:
+            self._selected_user_id = new_id
+            self._last_rendered_timestamp = None
+
+    async def _fetch_users(self):
+        try:
+            resp = await self.client.get("/users")
+            if resp.status_code != 200:
+                return
+            user_ids: list[str] = resp.json()
+            if not user_ids:
+                return
+            self._user_ids = user_ids
+            self._selected_user_id = user_ids[0]
+            select = self.query_one("#user-select", Select)
+            select.set_options([(uid, uid) for uid in user_ids])
+            select.value = user_ids[0]
+        except Exception:
+            pass
+
+    def action_next_user(self) -> None:
+        if not self._user_ids:
+            return
+        if self._selected_user_id not in self._user_ids:
+            next_id = self._user_ids[0]
+        else:
+            idx = self._user_ids.index(self._selected_user_id)
+            next_id = self._user_ids[(idx + 1) % len(self._user_ids)]
+        self._selected_user_id = next_id
+        self._last_rendered_timestamp = None
+        select = self.query_one("#user-select", Select)
+        select.value = next_id
 
     def _set_server_status(self, is_connected: bool):
         if self._server_connected == is_connected:
@@ -192,9 +247,10 @@ class DayTradingTUI(App):
         loop_count = snapshot.get("loop_count", 0)
         ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(snapshot_timestamp or time.time()))
         market_text = "장중" if market_open else "장외"
+        user_text = f"유저: {self._selected_user_id} | " if self._selected_user_id else ""
 
         self._update_summary_message(
-            f"상태: {market_text} | 루프: {loop_count} | 갱신: {ts}\n"
+            f"{user_text}상태: {market_text} | 루프: {loop_count} | 갱신: {ts}\n"
             f"총평가금액:{account.get('tot_evlu_amt', 0):,.0f} | 예수금: {account.get('cash', 0):,.0f} | D+1: {account.get('d1', 0):,.0f} | D+2: {account.get('d2', 0):,.0f}",
             "transparent",
             "white",
@@ -204,8 +260,10 @@ class DayTradingTUI(App):
         await self.client.aclose()
 
     async def refresh_dashboard(self):
+        if not self._selected_user_id:
+            return
         try:
-            resp = await self.client.get("/snapshot")
+            resp = await self.client.get("/snapshot", params={"app_id": self._selected_user_id})
             if resp.status_code != 200:
                 self._set_server_status(False)
                 return
@@ -397,9 +455,13 @@ class DayTradingTUI(App):
     async def _on_order_modal_result(self, result: dict | None):
         if result is None:
             return
+        if not self._selected_user_id:
+            self.notify("유저가 선택되지 않았습니다.", severity="error")
+            return
 
         try:
             resp = await self.client.post("/order", json={
+                "app_id": self._selected_user_id,
                 "side": result["side"],
                 "pdno": result["pdno"],
                 "quantity": result["quantity"]
