@@ -37,6 +37,10 @@ class DayTradingBot:
         self.log = print
         self.trade_log = None
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
+        self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
+        self.price_update_interval_sec = 2.5
+        self.last_price_update_at: dict[str, float] = {}
+
         self.snapshot_collect_candidates: list[SymbolItem] = []
         self._snapshot_toggle = False
         self._update_snapshot_collect_candidates()
@@ -78,9 +82,8 @@ class DayTradingBot:
             bot.process_once()
 
     def price_analysis_items(self, pdno: str):
-        bot = self.bots.get(self.user_manager.users[0].app_id)
-        if bot and pdno in bot.price_analysis.items:
-            return bot.price_analysis.items[pdno]
+        if pdno in self.price_analysis.items:
+            return self.price_analysis.items[pdno]
         return None
 
     def place_manual_buy(self, app_id: str, pdno: str, quantity: int):
@@ -148,7 +151,61 @@ class DayTradingBot:
         for bot in self.bots.values():
             if bot.interest_stock_manager.update_stock(pdno, name, price, volume):
                 bot.update_sell_list()
-       
+
+    def update_market_data(self, now: float):
+        # 모든 봇의 모니터링 리스트에서 중복을 제거한 관심 종목을 추출
+        monitor_dict: dict[str, SymbolItem] = {}
+        for bot in self.bots.values():
+            for item in bot.monitor_list:
+                if item.pdno not in monitor_dict:
+                    monitor_dict[item.pdno] = item
+
+        for symbol_item in monitor_dict.values():
+            self._update_price(symbol_item, now)
+
+    def _update_price(self, symbol_item: SymbolItem, now: Optional[float] = None, force: bool = False) -> Optional[float]:
+        """단일 종목의 현재가 조회"""
+        if now is None:
+            now = time.time()
+
+        cached_item = self.price_analysis.items.get(symbol_item.pdno)
+        if not force:
+            last_update_at = self.last_price_update_at.get(symbol_item.pdno, 0.0)
+            if now - last_update_at < self.price_update_interval_sec:
+                if cached_item is not None and cached_item.candle_stick_5minute:
+                    return cached_item.candle_stick_5minute[-1].close_price
+
+        error_count = 0
+        while error_count < 5:
+            try:
+                current_time = time.localtime(now)
+                hour = current_time.tm_hour
+                minute = current_time.tm_min
+                first_bot = self.bots.get(self.user_manager.users[0].app_id)
+                if first_bot is None:
+                    return None
+                    
+                candle = first_bot.auth.price.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
+                # candle 데이터중 첫번째 (가장 최근 데이터)의 현재가와 체결량을 가져온다.)
+                if candle is None:
+                    raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
+
+                break
+            except Exception as e:
+                error_count += 1
+                if error_count >= 5:
+                    self.log(f"Error fetching current price for {symbol_item.pdno} after 5 attempts: {e}")
+                    return None
+
+                time.sleep(1)  # 잠시 대기 후 재시도
+                continue
+
+        self.last_price_update_at[symbol_item.pdno] = now
+
+        if self.price_analysis.add_price(symbol_item, candle):
+            # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
+            print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {candle.close_price} / 거래량: {candle.volume}")
+
     def _update_snapshot_collect_candidates(self):
         self.snapshot_collect_candidates: list[SymbolItem] = []
         kosdq_records = load_kosdaq_master()
@@ -174,7 +231,6 @@ class DayTradingSingleBot:
         self.log = parent.log
         self.trade_log = parent.trade_log
         self.auth = user.auth
-        self.price_analysis = PriceAnalysis("./cache/price_analysis_cache.json")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
 
         self.loop_count = 0
@@ -182,8 +238,6 @@ class DayTradingSingleBot:
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
         self.monitor_list: list[SymbolItem] = []
-        self.price_update_interval_sec = 2.5
-        self.last_price_update_at: dict[str, float] = {}
         self.trade_reporter = TradeReporter(self)
 
         self.update_sell_list()
@@ -204,45 +258,6 @@ class DayTradingSingleBot:
         else:
             for stock in self.auth.account.stocks:
                 self.log(f"종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
-
-    def _update_price(self, symbol_item: SymbolItem, now: Optional[float] = None, force: bool = False) -> Optional[float]:
-        """단일 종목의 현재가 조회"""
-        if now is None:
-            now = time.time()
-
-        cached_item = self.price_analysis.items.get(symbol_item.pdno)
-        if not force:
-            last_update_at = self.last_price_update_at.get(symbol_item.pdno, 0.0)
-            if now - last_update_at < self.price_update_interval_sec:
-                if cached_item is not None and cached_item.candle_stick_5minute:
-                    return cached_item.candle_stick_5minute[-1].close_price
-
-        error_count = 0
-        while error_count < 5:
-            try:
-                current_time = time.localtime(now)
-                hour = current_time.tm_hour
-                minute = current_time.tm_min
-                candle = self.auth.price.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
-                # candle 데이터중 첫번째 (가장 최근 데이터)의 현재가와 체결량을 가져온다.)
-                if candle is None:
-                    raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
-
-                break
-            except Exception as e:
-                error_count += 1
-                if error_count >= 5:
-                    self.log(f"Error fetching current price for {symbol_item.pdno} after 5 attempts: {e}")
-                    return None
-
-                time.sleep(1)  # 잠시 대기 후 재시도
-                continue
-
-        self.last_price_update_at[symbol_item.pdno] = now
-
-        if self.price_analysis.add_price(symbol_item, candle):
-            # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
-            print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {candle.close_price} / 거래량: {candle.volume}")
 
     def _find_inventory(self, pdno: str):
         return self.auth.account.stocks_by_pdno.get(pdno)
@@ -268,7 +283,7 @@ class DayTradingSingleBot:
             self._symbol_log(symbol_item, "보유 수량이 확인되어 매도 주문 단계로 이동합니다.")
             return
         
-        if not self.price_analysis.is_purchase_overtime(pdno):
+        if not self.parent.price_analysis.is_purchase_overtime(pdno):
             # 보유 수량이 없는 경우 매수 주문 단계로 이동
             # 단 3시부터는 매도를 시작하므로 2시 50분부터는 그냥 판단 단계에 머무르도록 한다.
             state.step = TradeStep.DECIDE_ON_PURCHASE
@@ -286,7 +301,7 @@ class DayTradingSingleBot:
             self._symbol_log(symbol_item, "보유 수량이 확인되었으나 매수 주문 단계에 있어 판단 단계로 이동합니다.")
             return
 
-        if self.price_analysis.is_purchase_overtime(pdno):
+        if self.parent.price_analysis.is_purchase_overtime(pdno):
             self._symbol_log(symbol_item, "현재 시간은 매수 추천이 종료된 시간입니다. 매수 주문 단계에서 판단 단계로 이동합니다.")
             state.step = TradeStep.JUDGE_STEP
             return
@@ -294,14 +309,14 @@ class DayTradingSingleBot:
         if time.time() < state.cooldown_until:
             return
 
-        if self.price_analysis.is_purchase_recommended(pdno) is False:
+        if self.parent.price_analysis.is_purchase_recommended(pdno) is False:
             return
 
-        if pdno not in self.price_analysis.items or not self.price_analysis.items[pdno].candle_stick_5minute:
+        if pdno not in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
             return
 
         max_budget = 1000000
-        current_price = int(self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
+        current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
         quantity = int(max_budget // current_price)
         if quantity <= 0:
             return
@@ -390,8 +405,8 @@ class DayTradingSingleBot:
         purchase_price = float(inventory['pchs_avg_pric'])
         quantity = int(inventory['hldg_qty'])
 
-        if self.price_analysis.is_sell_stop_loss_recommended(pdno, purchase_price):
-            current_price = int(self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price) if pdno in self.price_analysis.items and self.price_analysis.items[pdno].candle_stick_5minute else 0
+        if self.parent.price_analysis.is_sell_stop_loss_recommended(pdno, purchase_price):
+            current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price) if pdno in self.parent.price_analysis.items and self.parent.price_analysis.items[pdno].candle_stick_5minute else 0
             order = self.immediately_sell(symbol_item, quantity)
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
@@ -400,13 +415,13 @@ class DayTradingSingleBot:
             state.step = TradeStep.WAIT_ACCEPT_SELL
             return
 
-        if not self.price_analysis.is_sell_recommended(pdno, purchase_price):
+        if not self.parent.price_analysis.is_sell_recommended(pdno, purchase_price):
             return
 
-        if pdno not in self.price_analysis.items or not self.price_analysis.items[pdno].candle_stick_5minute:
+        if pdno not in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
             return
 
-        current_price = int(self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
+        current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
         order = self.sell(symbol_item, quantity, current_price)
         self.trade_reporter.add(TradeType.SELL, symbol_item, quantity, current_price)
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
@@ -502,9 +517,6 @@ class DayTradingSingleBot:
             processed_pdnos.add(pdno)
 
             state = self._get_trade_state(pdno)
-
-            # 모든 step: 현재가 조회 및 분석(update_price)
-            self._update_price(symbol_item, now)
             step = state.step
 
             if step == TradeStep.JUDGE_STEP:
@@ -542,7 +554,7 @@ class DayTradingSingleBot:
 
         watch_rows = []
         for pdno in watch_pdnos:
-            item = self.price_analysis.items.get(pdno)
+            item = self.parent.price_analysis.items.get(pdno)
             current_price = None
             candle_count = 0
             volume = 0
@@ -566,8 +578,8 @@ class DayTradingSingleBot:
             quantity = int(stock.get('hldg_qty', 0))
             purchase_price = float(stock.get('pchs_avg_pric', 0))
             current_price = None
-            if pdno in self.price_analysis.items and self.price_analysis.items[pdno].candle_stick_5minute:
-                current_price = self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+            if pdno in self.parent.price_analysis.items and self.parent.price_analysis.items[pdno].candle_stick_5minute:
+                current_price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
             profit_rate = None
             if current_price is not None and purchase_price > 0:
@@ -602,11 +614,11 @@ class DayTradingSingleBot:
         if not self.is_market_open():
             raise ValueError("장외 시간에는 주문할 수 없습니다.")
 
-        if not pdno in self.price_analysis.items or not self.price_analysis.items[pdno].candle_stick_5minute:
+        if not pdno in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
             raise ValueError("현재가를 가져오지 못해 주문할 수 없습니다.")
         
-        symbol_item = self.price_analysis.items[pdno].symbol_item
-        price = self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+        symbol_item = self.parent.price_analysis.items[pdno].symbol_item
+        price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         result = self.buy(symbol_item, quantity, price)
         self.update_account_stock()
@@ -618,11 +630,11 @@ class DayTradingSingleBot:
         if not self.is_market_open():
             raise ValueError("장외 시간에는 주문할 수 없습니다.")
         
-        if not pdno in self.price_analysis.items or not self.price_analysis.items[pdno].candle_stick_5minute:
+        if not pdno in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
             raise ValueError("현재가를 가져오지 못해 주문할 수 없습니다.")
 
-        symbol_item = self.price_analysis.items[pdno].symbol_item
-        price = self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+        symbol_item = self.parent.price_analysis.items[pdno].symbol_item
+        price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         inventory = self.auth.account.stocks_by_pdno.get(pdno)
         if inventory is None:
@@ -733,6 +745,7 @@ if __name__ == "__main__":
     user_app_ids = bot.get_user_app_ids()
     while True:
         now = time.time()
+        bot.update_market_data(now)
         bot.update_interest_stock_manager(now)
 
         for app_id in user_app_ids:

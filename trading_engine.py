@@ -94,7 +94,9 @@ class TradingEngine:
             try:
                 self._process_orders(app_id)
                 if user_index == 0:
-                    self.bot.update_interest_stock_manager(time.time())
+                    now = time.time()
+                    self.bot.update_market_data(now)
+                    self.bot.update_interest_stock_manager(now)
 
                 self.bot.process_once(app_id)
                 snapshot = self.bot.get_dashboard_snapshot(app_id)
