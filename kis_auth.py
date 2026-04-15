@@ -27,6 +27,11 @@ class KisAuth:
 
         from kis_auth_order import KisAuthOrder
         self.order = KisAuthOrder(self)
+    
+    def delete_token(self):
+        # 토큰 캐시 파일 삭제
+        if os.path.exists(self.token_cache_file):
+            os.remove(self.token_cache_file)
 
     def _get_access_token(self):
         # 캐시된 토큰이 유효한지 확인

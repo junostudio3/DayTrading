@@ -160,4 +160,5 @@ async def submit_order(order: OrderRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run("main_server:app", host="0.0.0.0", port=1530, reload=False)
+    access_log = False # uvicorn의 기본 access log는 너무 많은 로그를 생성하므로 비활성화
+    uvicorn.run("main_server:app", host="0.0.0.0", port=1530, reload=False, access_log=access_log)

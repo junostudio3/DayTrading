@@ -416,6 +416,10 @@ class DayTradingSingleBot:
         if self.parent.price_analysis.is_sell_stop_loss_recommended(pdno, purchase_price):
             current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price) if pdno in self.parent.price_analysis.items and self.parent.price_analysis.items[pdno].candle_stick_5minute else 0
             order = self.immediately_sell(symbol_item, quantity)
+            if order is None:
+                self._symbol_log(symbol_item, f"손절 추천이지만 즉시 매도 주문에 실패했습니다. 다음 루프에서 다시 시도합니다.")
+                return
+
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
             self._symbol_log(symbol_item, f"손절 추천: 구매가: {purchase_price} / 현재가: {current_price}")
@@ -431,6 +435,9 @@ class DayTradingSingleBot:
 
         current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
         order = self.sell(symbol_item, quantity, current_price)
+        if order is None:
+            return
+
         self.trade_reporter.add(TradeType.SELL, symbol_item, quantity, current_price)
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
@@ -653,6 +660,9 @@ class DayTradingSingleBot:
             raise ValueError(f"보유 수량({holding_qty})을 초과하여 매도할 수 없습니다.")
 
         result = self.sell(symbol_item, quantity, price)
+        if result is None:
+            raise ValueError("매도 주문이 실패했습니다.")
+
         self.update_account_stock()
         return result
 
@@ -684,6 +694,7 @@ class DayTradingSingleBot:
             except Exception as e:
                 if try_count >= 5:
                     self.log(f"계좌 Stock 정보 업데이트 실패: {e}")
+                    self.auth.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 주문 시 재발급 받도록 한다.
                 time.sleep(1)  # 잠시 대기 후 재시도
                 try_count += 1
         try_count = 0
@@ -694,6 +705,7 @@ class DayTradingSingleBot:
             except Exception as e:
                 if try_count >= 5:
                     self.log(f"계좌 정보 업데이트 실패: {e}")
+                    self.auth.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 주문 시 재발급 받도록 한다.   
                 time.sleep(1)  # 잠시 대기 후 재시도
                 try_count += 1
         
@@ -729,23 +741,31 @@ class DayTradingSingleBot:
 
     def sell(self, symbol_item: SymbolItem, quantity: int, price: int):
         """현금 매도 주문"""
-        while True:
+        for try_count in range(20):
             try:
                 return self.auth.order.sell_order_cash(symbol_item.pdno, quantity, price)
             except Exception as e:
-                self._symbol_log(symbol_item, f"매도 주문 실패\n{e}")
+                last_error = e
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
-    
+
+        self._symbol_log(symbol_item, f"매도 주문 실패\n{last_error}")
+        self.auth.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 주문 시 재발급 받도록 한다.
+        return None
+
     def immediately_sell(self, symbol_item: SymbolItem, quantity: int):
         """즉시 매도 주문 (시장가)"""
-        while True:
+        for try_count in range(20):
             try:
                 return self.auth.order.immediately_sell(symbol_item.pdno, quantity)
             except Exception as e:
-                self._symbol_log(symbol_item, f"즉시 매도 주문 실패\n{e}")
+                last_error = e
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
+
+        self._symbol_log(symbol_item, f"즉시 매도 주문 실패\n{last_error}")
+        self.auth.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 주문 시 재발급 받도록 한다.
+        return None
 
 if __name__ == "__main__":
     bot = DayTradingBot()
