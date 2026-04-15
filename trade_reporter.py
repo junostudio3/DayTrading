@@ -40,6 +40,7 @@ class TradeType(Enum):
 class TradeReporter:
     def __init__(self, bot):
         self.bot = bot
+        self.bot_parent = self.bot.parent
         self.account_balance: AccountBalance = None
 
     def set_account_balance(self, account_balance: AccountBalance):
@@ -52,18 +53,17 @@ class TradeReporter:
         
         # 특정 거래 유형에서 기술적 지표를 리포트에 추가
         if trade_type in [TradeType.BUY, TradeType.SELL, TradeType.IMMEDIATE_SELL]:
-            # self.bot.price_analysis.items에서 현재 지표 추출
-            if hasattr(self.bot, 'price_analysis') and symbol_item.pdno in self.bot.price_analysis.items:
-                p_item = self.bot.price_analysis.items[symbol_item.pdno]
-                if hasattr(p_item, 'get_current_indicators'):
-                    indicators = p_item.get_current_indicators()
-                    if indicators:
-                        ind_strs = []
-                        for k, v in indicators.items():
-                            if v is not None:
-                                ind_strs.append(f"{k}:{v}")
-                        if ind_strs:
-                            log_text += f" / 지표: [{', '.join(ind_strs)}]"
+            # self.bot_parent.price_analysis.items에서 현재 지표 추출
+            if symbol_item.pdno in self.bot_parent.price_analysis.items:
+                p_item = self.bot_parent.price_analysis.items[symbol_item.pdno]
+                indicators = p_item.get_current_indicators()
+                if indicators:
+                    ind_strs = []
+                    for k, v in indicators.items():
+                        if v is not None:
+                            ind_strs.append(f"{k}:{v}")
+                    if ind_strs:
+                        log_text += f" / 지표: [{', '.join(ind_strs)}]"
 
         if text:
             log_text += f" / 사유: {text}"
