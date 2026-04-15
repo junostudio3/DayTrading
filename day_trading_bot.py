@@ -459,7 +459,7 @@ class DayTradingSingleBot:
             state.step = TradeStep.DECIDE_ON_PURCHASE
         elif (
             state.sell_order_requested_at > 0
-            and (time.time() - state.sell_order_requested_at) > self.SELL_ORDER_TIMEOUT_SECONDS
+            and (time.time() - state.sell_order_requested_at) > self.parent.SELL_ORDER_TIMEOUT_SECONDS
         ):
             try:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
@@ -468,12 +468,12 @@ class DayTradingSingleBot:
                 self.update_account_stock()
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
-                self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
+                self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.parent.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
                 state.sell_order_no = ""
                 state.sell_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
-                self._symbol_log(symbol_item, f"매도 주문 체결 대기가 {self.SELL_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
+                self._symbol_log(symbol_item, f"매도 주문 체결 대기가 {self.parent.SELL_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return            
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
