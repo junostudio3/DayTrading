@@ -128,6 +128,7 @@ function Dashboard() {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
+  const [marketTab, setMarketTab] = useState<'holdings' | 'watch'>('holdings');
   const [tab, setTab] = useState<'trade_logs' | 'logs'>('trade_logs');
   const [orderModal, setOrderModal] = useState<{ show: boolean; side: 'buy' | 'sell'; pdno: string | null }>({ show: false, side: 'buy', pdno: null });
   const [orderQty, setOrderQty] = useState<string>('');
@@ -212,6 +213,80 @@ function Dashboard() {
   const account = snapshot?.account || {};
   const ts = snapshot?.timestamp ? new Date(snapshot.timestamp * 1000).toLocaleString() : '';
 
+  const renderHoldingsSection = (className = 'section') => (
+    <div className={className}>
+      <h2>보유주식 (Holdings)</h2>
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>종목</th>
+              <th>이름</th>
+              <th>수량</th>
+              <th>매입가</th>
+              <th>현재가</th>
+              <th>손익률</th>
+              <th>매도</th>
+            </tr>
+          </thead>
+          <tbody>
+            {snapshot?.holdings?.map((h) => (
+              <tr key={h.pdno} onClick={() => setSelectedPdno(h.pdno)} className={selectedPdno === h.pdno ? 'selected' : ''}>
+                <td>{h.pdno}</td>
+                <td>{h.name}</td>
+                <td>{h.qty}</td>
+                <td>{h.purchase?.toLocaleString()}</td>
+                <td>{h.current?.toLocaleString()}</td>
+                <td style={{ color: h.profit_rate > 0 ? '#ff4d4f' : h.profit_rate < 0 ? '#1890ff' : 'inherit' }}>
+                  {h.profit_rate?.toFixed(2)}%
+                </td>
+                <td>
+                  <button className="btn-sell" onClick={(e) => { e.stopPropagation(); setOrderModal({ show: true, side: 'sell', pdno: h.pdno }); }}>매도</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderWatchSection = (className = 'section') => (
+    <div className={className}>
+      <h2>관심종목 (Watchlist)</h2>
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>종목</th>
+              <th>이름</th>
+              <th>현재가</th>
+              <th>캔들수</th>
+              <th>체결량</th>
+              <th>진행</th>
+              <th>매수</th>
+            </tr>
+          </thead>
+          <tbody>
+            {snapshot?.watch?.map((w) => (
+              <tr key={w.pdno} onClick={() => setSelectedPdno(w.pdno)} className={selectedPdno === w.pdno ? 'selected' : ''}>
+                <td>{w.pdno}</td>
+                <td>{w.name}</td>
+                <td>{w.price?.toLocaleString()}</td>
+                <td>{w.candles}</td>
+                <td>{w.volume?.toLocaleString()}</td>
+                <td>{w.step}</td>
+                <td>
+                  <button className="btn-buy" onClick={(e) => { e.stopPropagation(); setOrderModal({ show: true, side: 'buy', pdno: w.pdno }); }}>매수</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
   return (
     <div className="app-container">
       <header className="header">
@@ -238,42 +313,13 @@ function Dashboard() {
 
       <div className="main-content">
         <div className="left-panel">
-          <div className="section">
-            <h2>보유주식 (Holdings)</h2>
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>종목</th>
-                    <th>이름</th>
-                    <th>수량</th>
-                    <th>매입가</th>
-                    <th>현재가</th>
-                    <th>손익률</th>
-                    <th>주문</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot?.holdings?.map((h) => (
-                    <tr key={h.pdno} onClick={() => setSelectedPdno(h.pdno)} className={selectedPdno === h.pdno ? 'selected' : ''}>
-                      <td>{h.pdno}</td>
-                      <td>{h.name}</td>
-                      <td>{h.qty}</td>
-                      <td>{h.purchase?.toLocaleString()}</td>
-                      <td>{h.current?.toLocaleString()}</td>
-                      <td style={{ color: h.profit_rate > 0 ? '#ff4d4f' : h.profit_rate < 0 ? '#1890ff' : 'inherit' }}>
-                        {h.profit_rate?.toFixed(2)}%
-                      </td>
-                      <td>
-                        <button className="btn-buy" onClick={(e) => { e.stopPropagation(); setOrderModal({ show: true, side: 'buy', pdno: h.pdno }); }}>매수</button>
-                        <button className="btn-sell" onClick={(e) => { e.stopPropagation(); setOrderModal({ show: true, side: 'sell', pdno: h.pdno }); }}>매도</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="market-tabs" role="tablist" aria-label="보유주식과 관심종목">
+            <button className={marketTab === 'holdings' ? 'active' : ''} onClick={() => setMarketTab('holdings')}>보유주식</button>
+            <button className={marketTab === 'watch' ? 'active' : ''} onClick={() => setMarketTab('watch')}>관심종목</button>
           </div>
+          {renderHoldingsSection(`section mobile-tab-section ${marketTab === 'holdings' ? 'active' : ''}`)}
+          {renderWatchSection(`section mobile-tab-section ${marketTab === 'watch' ? 'active' : ''}`)}
+          {renderHoldingsSection('section desktop-holdings-section')}
           <div className="section chart-section">
             <h2>그래프 ({selectedPdno || '종목 선택'})</h2>
             <div className="chart-container">
@@ -282,41 +328,8 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="right-panel">
-          <div className="section">
-            <h2>관심종목 (Watchlist)</h2>
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>종목</th>
-                    <th>이름</th>
-                    <th>현재가</th>
-                    <th>캔들수</th>
-                    <th>체결량</th>
-                    <th>진행</th>
-                    <th>주문</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot?.watch?.map((w) => (
-                    <tr key={w.pdno} onClick={() => setSelectedPdno(w.pdno)} className={selectedPdno === w.pdno ? 'selected' : ''}>
-                      <td>{w.pdno}</td>
-                      <td>{w.name}</td>
-                      <td>{w.price?.toLocaleString()}</td>
-                      <td>{w.candles}</td>
-                      <td>{w.volume?.toLocaleString()}</td>
-                      <td>{w.step}</td>
-                      <td>
-                        <button className="btn-buy" onClick={(e) => { e.stopPropagation(); setOrderModal({ show: true, side: 'buy', pdno: w.pdno }); }}>매수</button>
-                        <button className="btn-sell" onClick={(e) => { e.stopPropagation(); setOrderModal({ show: true, side: 'sell', pdno: w.pdno }); }}>매도</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <div className="right-panel desktop-watch-panel">
+          {renderWatchSection()}
         </div>
       </div>
 

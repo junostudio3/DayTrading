@@ -83,6 +83,11 @@ body { margin: 0; font-family: sans-serif; background: #1e1e1e; color: #d9d9d9; 
   overflow: hidden;
 }
 
+.market-tabs,
+.section.mobile-tab-section {
+  display: none;
+}
+
 .section {
   display: flex;
   flex-direction: column;
@@ -180,6 +185,11 @@ tbody tr.selected { background: #094771; }
   border-bottom: 2px solid #007acc;
 }
 
+.market-tabs button.active {
+  color: #fff;
+  border-bottom: 2px solid #007acc;
+}
+
 .log-content-wrapper {
   flex: 1;
   overflow-y: auto;
@@ -214,8 +224,49 @@ tbody tr.selected { background: #094771; }
   gap: 15px;
 }
 
-.modal h2 { margin: 0; font-size: 1.1rem; }
+.modal h2 { margin: 0; font-size: 1.1rem; color: #fff; }
 .modal input { padding: 8px; width: 100%; background: #3c3c3c; color: #fff; border: 1px solid #555; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .modal-actions button { padding: 6px 12px; cursor: pointer; border: none; border-radius: 4px; color: #fff; }
 .modal-actions button:last-child { background: #555; }
+
+@media (max-width: 900px) and (orientation: portrait) {
+  .main-content {
+    flex-direction: column;
+  }
+
+  .left-panel {
+    min-height: 0;
+  }
+
+  .market-tabs {
+    display: flex;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+
+  .market-tabs button {
+    background: transparent;
+    color: #aaa;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 0 4px;
+  }
+
+  .desktop-holdings-section,
+  .desktop-watch-panel {
+    display: none;
+  }
+
+  .section.mobile-tab-section.active {
+    display: flex;
+    flex: 2 1 0;
+    min-height: 0;
+  }
+
+  .chart-section {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+}
