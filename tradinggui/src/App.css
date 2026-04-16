@@ -47,6 +47,24 @@ body { margin: 0; font-family: sans-serif; background: #1e1e1e; color: #d9d9d9; 
 .status-summary.connected { background: #004d40; color: #fff; }
 .status-summary.disconnected { background: #b71c1c; color: #fff; }
 
+/* Keep landscape layout as-is; stack status below on mobile portrait. */
+@media (max-width: 900px) and (orientation: portrait) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .header-left {
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .status-summary {
+    width: 100%;
+  }
+}
+
 .main-content {
   display: flex;
   flex: 1;
