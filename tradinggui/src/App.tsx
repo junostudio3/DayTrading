@@ -121,10 +121,8 @@ function ChartComponent({ pdno }: { pdno: string | null }) {
   return <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />;
 }
 
-export default function App() {
-  const [authToken, setAuthToken] = useState<string | null>(localStorage.getItem('PULSE_TRADE_TOKEN'));
-  const [tokenInput, setTokenInput] = useState('');
-  
+function Dashboard() {
+    
   const [userIds, setUserIds] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -135,35 +133,6 @@ export default function App() {
   const [orderQty, setOrderQty] = useState<string>('');
   const tradeLogRef = useRef<HTMLDivElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
-
-  if (!authToken) {
-    return (
-      <div className="modal-overlay">
-        <div className="modal">
-          <h2>인증 토큰 입력</h2>
-          <input 
-            type="password" 
-            placeholder="하드코딩된 토큰을 입력하세요" 
-            value={tokenInput} 
-            onChange={(e) => setTokenInput(e.target.value)} 
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                localStorage.setItem('PULSE_TRADE_TOKEN', tokenInput);
-                setAuthToken(tokenInput);
-              }
-            }}
-            autoFocus 
-          />
-          <div className="modal-actions">
-            <button className="btn-buy" onClick={() => {
-              localStorage.setItem('PULSE_TRADE_TOKEN', tokenInput);
-              setAuthToken(tokenInput);
-            }}>접속</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   useEffect(() => {
     fetchWithAuth(`${API_BASE_URL}/users`)
@@ -383,4 +352,40 @@ export default function App() {
       )}
     </div>
   );
+}
+
+export default function App() {
+  const [authToken, setAuthToken] = useState<string | null>(localStorage.getItem('PULSE_TRADE_TOKEN'));
+  const [tokenInput, setTokenInput] = useState('');
+
+  if (!authToken) {
+    return (
+      <div className="modal-overlay">
+        <div className="modal">
+          <h2>PulseTrade 접속</h2>
+          <input 
+            type="password" 
+            placeholder="상위 보안 토큰을 입력하세요" 
+            value={tokenInput} 
+            onChange={(e) => setTokenInput(e.target.value)} 
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                localStorage.setItem('PULSE_TRADE_TOKEN', tokenInput);
+                setAuthToken(tokenInput);
+              }
+            }}
+            autoFocus 
+          />
+          <div className="modal-actions">
+            <button className="btn-buy" onClick={() => {
+              localStorage.setItem('PULSE_TRADE_TOKEN', tokenInput);
+              setAuthToken(tokenInput);
+            }}>로그인</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <Dashboard />;
 }
