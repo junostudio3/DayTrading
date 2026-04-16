@@ -1,0 +1,115 @@
+:root {
+  --bg: #f7f3ea;
+  --bg-deep: #efe6d7;
+  --surface: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(255, 255, 255, 0.75);
+  --text-main: #18212f;
+  --muted: #5e6b7b;
+  --accent: #fb923c;
+  --accent-deep: #c2410c;
+  --positive-strong: #0f9b84;
+  --negative-strong: #dc2626;
+  --shadow-lg: 0 30px 80px rgba(15, 23, 42, 0.16);
+  --font-sans: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
+  --font-display: 'Sora', 'Space Grotesk', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at top left, rgba(251, 146, 60, 0.18), transparent 32%),
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.12), transparent 28%),
+    linear-gradient(180deg, #fdf9f1 0%, var(--bg) 48%, var(--bg-deep) 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: transparent;
+}
+
+button {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.75rem 1.15rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:focus-visible {
+  outline: 3px solid rgba(251, 146, 60, 0.28);
+  outline-offset: 2px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+strong {
+  color: var(--text-main);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  line-height: 1.05;
+}
+
+h1 {
+  font-size: clamp(2.8rem, 5vw, 5.4rem);
+  letter-spacing: -0.06em;
+  margin-bottom: 12px;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 2vw, 2.2rem);
+  letter-spacing: -0.04em;
+}
+
+h3 {
+  font-size: 1.3rem;
+  letter-spacing: -0.03em;
+}
+
+p,
+span {
+  font-size: 0.98rem;
+}
+
+code {
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 860px) {
+  :root {
+    font-size: 15px;
+  }
+}
