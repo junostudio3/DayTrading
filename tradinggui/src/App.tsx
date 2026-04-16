@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import './App.css';
 
 const API_BASE_URL = 'https://juncom.duckdns.org/day-trading-api';
@@ -121,6 +122,43 @@ function ChartComponent({ pdno }: { pdno: string | null }) {
   return <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />;
 }
 
+function AccountHistoryChartComponent({ userId }: { userId: string }) {
+  const [data, setData] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchWithAuth(`${API_BASE_URL}/account_history?app_id=${userId}`)
+      .then((res) => res.json())
+      .then((history) => {
+        if (history && history.length > 0) {
+          const chartData = history.map((item: any) => ({
+            time: item.time,
+            tot_evlu_amt: item.tot_evlu_amt,
+            dnca_tot_amt: item.dnca_tot_amt,
+          }));
+          setData(chartData);
+        }
+      })
+      .catch((err) => console.error(err));
+  }, [userId]);
+
+  return (
+    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+          <XAxis dataKey="time" stroke="#D9D9D9" />
+          <YAxis stroke="#D9D9D9" domain={['auto', 'auto']} />
+          <Tooltip contentStyle={{ backgroundColor: '#1E1E1E', borderColor: '#444' }} />
+          <Legend />
+          <Line type="monotone" dataKey="tot_evlu_amt" name="총평가금액" stroke="#26a69a" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="dnca_tot_amt" name="예수금" stroke="#8884d8" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function Dashboard() {
     
   const [userIds, setUserIds] = useState<string[]>([]);
@@ -129,7 +167,7 @@ function Dashboard() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
   const [marketTab, setMarketTab] = useState<'holdings' | 'watch'>('holdings');
-  const [tab, setTab] = useState<'trade_logs' | 'logs'>('trade_logs');
+  const [tab, setTab] = useState<'trade_logs' | 'logs' | 'history'>('trade_logs');
   const [orderModal, setOrderModal] = useState<{ show: boolean; side: 'buy' | 'sell'; pdno: string | null }>({ show: false, side: 'buy', pdno: null });
   const [orderQty, setOrderQty] = useState<string>('');
   const tradeLogRef = useRef<HTMLDivElement>(null);
@@ -337,11 +375,16 @@ function Dashboard() {
         <div className="tabs">
           <button className={tab === 'trade_logs' ? 'active' : ''} onClick={() => setTab('trade_logs')}>거래 로그</button>
           <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>일반 로그</button>
+          <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>자금 흐름</button>
         </div>
-        <div className="log-content-wrapper" ref={tab === 'trade_logs' ? tradeLogRef : logsRef}>
-          {(tab === 'trade_logs' ? snapshot?.trade_logs : snapshot?.logs)?.map((log, i) => (
-            <div key={i} className="log-line">{log}</div>
-          ))}
+        <div className={`log-content-wrapper ${tab !== 'history' ? 'log-content-padded' : ''}`} ref={tab === 'trade_logs' ? tradeLogRef : logsRef}>
+          {tab === 'history' ? (
+            <AccountHistoryChartComponent userId={selectedUser} />
+          ) : (
+            (tab === 'trade_logs' ? snapshot?.trade_logs : snapshot?.logs)?.map((log, i) => (
+              <div key={i} className="log-line">{log}</div>
+            ))
+          )}
         </div>
       </div>
 

@@ -7,6 +7,11 @@ import zipfile
 import urllib.request
 from contextlib import asynccontextmanager
 from KisKey import API_SECRET_TOKEN # 보안 토큰 설정 (하드코딩)
+from KisKey import mysql_host
+from KisKey import mysql_port
+from KisKey import mysql_user
+from KisKey import mysql_password
+from KisKey import mysql_database
 
 # debugpy 설정 - DEBUG_PORT 환경변수가 설정되면 디버거 활성화
 DEBUG_PORT = os.getenv("DEBUG_PORT")
@@ -176,6 +181,36 @@ async def submit_order(order: OrderRequest):
     
     engine.submit_order(app_id=order.app_id, side=order.side, pdno=order.pdno, quantity=order.quantity)
     return {"status": "ok", "message": f"{order.side} command submitted for {order.pdno} ({order.quantity})"}
+
+@app.get("/account_history")
+async def get_account_history(app_id: str = Query(..., description="User app ID")):
+    import pymysql
+    try:
+        connection = pymysql.connect(
+            host=mysql_host,
+            port=mysql_port,
+            user=mysql_user,
+            password=mysql_password,
+            database=mysql_database,
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        try:
+            with connection.cursor() as cursor:
+                sql = """
+                    SELECT id, app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, DATE_FORMAT(time, '%Y-%m-%d %H:%i:%s') as time
+                    FROM accounthistory
+                    WHERE app_id = %s
+                    AND time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                    ORDER BY time ASC
+                """
+                cursor.execute(sql, (app_id,))
+                result = cursor.fetchall()
+                return result
+        finally:
+            connection.close()
+    except Exception as e:
+        logger.error(f"Failed to fetch account history: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
 
 
 if __name__ == "__main__":
