@@ -4,6 +4,17 @@ import './App.css';
 
 const API_BASE_URL = 'https://juncom.duckdns.org/day-trading-api';
 
+const fetchWithAuth = async (url: string, options: any = {}) => {
+  const token = localStorage.getItem('PULSE_TRADE_TOKEN');
+  const headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401 || res.status === 403) {
+    localStorage.removeItem('PULSE_TRADE_TOKEN');
+    window.location.reload();
+  }
+  return res;
+};
+
 interface Account {
   tot_evlu_amt?: number;
   cash?: number;
@@ -87,7 +98,7 @@ function ChartComponent({ pdno }: { pdno: string | null }) {
   useEffect(() => {
     if (!pdno || !seriesRef.current) return;
 
-    fetch(`${API_BASE_URL}/candles/${pdno}`)
+    fetchWithAuth(`${API_BASE_URL}/candles/${pdno}`)
       .then((res) => res.json())
       .then((data: any[]) => {
         if (data && data.length > 0) {
@@ -111,6 +122,9 @@ function ChartComponent({ pdno }: { pdno: string | null }) {
 }
 
 export default function App() {
+  const [authToken, setAuthToken] = useState<string | null>(localStorage.getItem('PULSE_TRADE_TOKEN'));
+  const [tokenInput, setTokenInput] = useState('');
+  
   const [userIds, setUserIds] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -122,8 +136,37 @@ export default function App() {
   const tradeLogRef = useRef<HTMLDivElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
 
+  if (!authToken) {
+    return (
+      <div className="modal-overlay">
+        <div className="modal">
+          <h2>인증 토큰 입력</h2>
+          <input 
+            type="password" 
+            placeholder="하드코딩된 토큰을 입력하세요" 
+            value={tokenInput} 
+            onChange={(e) => setTokenInput(e.target.value)} 
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                localStorage.setItem('PULSE_TRADE_TOKEN', tokenInput);
+                setAuthToken(tokenInput);
+              }
+            }}
+            autoFocus 
+          />
+          <div className="modal-actions">
+            <button className="btn-buy" onClick={() => {
+              localStorage.setItem('PULSE_TRADE_TOKEN', tokenInput);
+              setAuthToken(tokenInput);
+            }}>접속</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
-    fetch(`${API_BASE_URL}/users`)
+    fetchWithAuth(`${API_BASE_URL}/users`)
       .then((res) => res.json())
       .then((data) => {
         if (data && data.length > 0) {
@@ -139,7 +182,7 @@ export default function App() {
     
     const fetchSnapshot = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/snapshot?app_id=${selectedUser}`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/snapshot?app_id=${selectedUser}`);
         if (res.ok) {
           const data = await res.json();
           setSnapshot(data);
@@ -174,7 +217,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/order`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

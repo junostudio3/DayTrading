@@ -6,6 +6,7 @@ import os
 import zipfile
 import urllib.request
 from contextlib import asynccontextmanager
+from KisKey import API_SECRET_TOKEN # 보안 토큰 설정 (하드코딩)
 
 # debugpy 설정 - DEBUG_PORT 환경변수가 설정되면 디버거 활성화
 DEBUG_PORT = os.getenv("DEBUG_PORT")
@@ -20,7 +21,8 @@ if DEBUG_PORT:
         print(f"[WARNING] Failed to start debugpy: {e}")
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Depends, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -32,6 +34,13 @@ from telegram_sender import send_telegram_server_power_log
 # 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    if credentials.credentials != API_SECRET_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid authorization token")
+    return credentials.credentials
 
 # 크래시 로거 설정
 crash_logger = logging.getLogger("crash_logger")
@@ -98,7 +107,17 @@ async def lifespan(app: FastAPI):
     send_telegram_server_power_log("🔴 <b>[서버 종료]</b> Day Trading Bot 서버가 안전하게 종료되었습니다.", sync=True)
 
 
-app = FastAPI(title="Day Trading Bot API", lifespan=lifespan)
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="Day Trading Bot API", lifespan=lifespan, dependencies=[Depends(verify_token)])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
