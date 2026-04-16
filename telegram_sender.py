@@ -36,7 +36,7 @@ def send_telegram_message(text: str, sync: bool = False):
     else:
         send_telegram_message_async(text)
 
-def send_telegram_server_power_log(text: str):
+def send_telegram_server_power_log(text: str, sync: bool = False):
     """서버 전원 관련 로그를 텔레그램으로 전송합니다."""
     if telegram_server_power_log:
-        send_telegram_message(text, sync=True)
+        send_telegram_message(text, sync=sync)

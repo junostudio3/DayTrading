@@ -240,6 +240,7 @@ class DayTradingSingleBot:
         self.log = parent.log
         self.trade_log = parent.trade_log
         self.auth = user.auth
+        self.app_id = user.app_id
 
         self.loop_count = 0
         self.is_running = True
@@ -506,10 +507,27 @@ class DayTradingSingleBot:
          - 장이 시작되면, _process_step 함수를 호출하여 매매 로직을 실행한다.
         '''
         now = time.time()
+        local_time = time.localtime(now)
+        date_str = time.strftime("%Y-%m-%d", local_time)
+
+        if getattr(self, '_current_date', None) != date_str:
+            self._current_date = date_str
+            self.daily_start_logged = False
+            self.daily_end_logged = False
+
+            # 만약 봇이 장중에 시작되었다면 시작 로그를 찍도록 설정
+            if self.is_market_open(now):
+                self.is_running = False
 
         if not self.is_market_open(now):
             if self.is_running:
-                if time.localtime(now).tm_wday >= 5:
+                # 장이 열려 있다가 닫힌 경우
+                if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
+                    self.update_account_stock()
+                    self.record_account_history()
+                    self.daily_end_logged = True
+
+                if local_time.tm_wday >= 5:
                     self.log("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
                 else:
                     self.log("장외 시간입니다. 9:00 ~ 15:30 사이에만 동작합니다.")
@@ -517,8 +535,53 @@ class DayTradingSingleBot:
             self.is_running = False
             return
 
+        if not self.is_running:
+            # 장이 닫혀 있다가 열린 경우 (장 시작)
+            if not self.daily_start_logged:
+                self.update_account_stock()
+                self.record_account_history()
+                self.daily_start_logged = True
+
         self.is_running = True
         self._process_step(now)
+
+    def record_account_history(self):
+        try:
+            from KisKey import mysql_host
+            from KisKey import mysql_port
+            from KisKey import mysql_user
+            from KisKey import mysql_password
+            from KisKey import mysql_database
+            import pymysql
+
+            connection = pymysql.connect(
+                host=mysql_host,
+                port=mysql_port,
+                user=mysql_user,
+                password=mysql_password,
+                database=mysql_database,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            try:
+                with connection.cursor() as cursor:
+                    sql = """
+                        INSERT INTO accounthistory 
+                        (app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, time)
+                        VALUES (%s, %s, %s, %s, %s, NOW())
+                    """
+                    balance = self.auth.account.balance
+                    cursor.execute(sql, (
+                        self.app_id,
+                        int(balance.tot_evlu_amt),
+                        int(balance.dnca_tot_amt),
+                        int(balance.nxdy_excc_amt),
+                        int(balance.prvs_rcdl_excc_amt)
+                    ))
+                connection.commit()
+            finally:
+                connection.close()
+        except Exception as e:
+            self.log(f"계좌 기록 DB 저장 실패: {e}")
 
     def _process_step(self, now: float):
         # 종목별 상태머신 동작
