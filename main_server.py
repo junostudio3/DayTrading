@@ -1,10 +1,7 @@
 import logging
 import sys
 import traceback
-import io
 import os
-import zipfile
-import urllib.request
 from contextlib import asynccontextmanager
 from KisKey import API_SECRET_TOKEN # 보안 토큰 설정 (하드코딩)
 from KisKey import mysql_host
@@ -70,32 +67,10 @@ sys.excepthook = handle_exception
 bot = None
 engine = None
 
-def download_and_extract_master_files():
-    base_url = "https://new.real.download.dws.co.kr/common/master/"
-    files = ["kospi_code.mst", "kosdaq_code.mst"]
-    info_dir = "./information"
-    os.makedirs(info_dir, exist_ok=True)
-    
-    for file_name in files:
-        zip_url = f"{base_url}{file_name}.zip"
-        logger.info(f"Downloading {zip_url}...")
-        try:
-            req = urllib.request.Request(zip_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response:
-                with zipfile.ZipFile(io.BytesIO(response.read())) as z:
-                    z.extract(file_name, path=info_dir)
-                    logger.info(f"Extracted {file_name} to {info_dir}")
-        except Exception as e:
-            logger.error(f"Failed to download or extract {file_name}: {e}")
-            crash_logger.error(f"Failed to download or extract {file_name}: {e}")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global bot, engine
     logger.info("Initializing DayTradingBot and TradingEngine...")
-    
-    # 서버 기동 시 마스터 파일 다운로드 및 압축 해제
-    download_and_extract_master_files()
     
     bot = DayTradingBot()
     engine = TradingEngine(bot, interval_seconds=1)

@@ -5,6 +5,7 @@ certifi==2026.1.4
 charset-normalizer==3.4.4
 click==8.3.1
 debugpy==1.8.20
+dill==0.4.1
 fastapi==0.135.1
 h11==0.16.0
 httpcore==1.0.9
@@ -14,6 +15,8 @@ linkify-it-py==2.0.3
 markdown-it-py==4.0.0
 mdit-py-plugins==0.5.0
 mdurl==0.1.2
+numpy==2.4.4
+pandas==2.3.3
 platformdirs==4.9.2
 plotext==5.3.2
 py-spy==0.4.1
@@ -21,12 +24,17 @@ pydantic==2.12.5
 pydantic_core==2.41.5
 Pygments==2.19.2
 PyMySQL==1.1.2
+python-dateutil==2.9.0.post0
+pytz==2026.1.post1
 requests==2.32.5
 rich==14.3.3
+six==1.17.0
 starlette==1.0.0
 textual==8.0.0
+toml==0.10.2
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+tzdata==2026.1
 uc-micro-py==1.0.3
 urllib3==2.6.3
 uvicorn==0.42.0

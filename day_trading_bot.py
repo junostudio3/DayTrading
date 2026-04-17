@@ -7,7 +7,6 @@ from info_kosdaq import load_kosdaq_master
 from info_kospi import load_kospi_master
 from price_analysis import PriceAnalysis
 from interest_stock_manager import InterestStockManager
-import time
 from dataclasses import dataclass
 from typing import Optional
 from typing import List
@@ -16,6 +15,12 @@ from common_structure import SymbolItem
 from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
 from trade_reporter import TradeReporter, TradeType
 from filter import TradingParams
+
+import io
+import os
+import time
+import urllib.request
+import zipfile
 
 
 @dataclass
@@ -29,9 +34,6 @@ class TradeState:
 
 
 class DayTradingBot:
-    BUY_ORDER_TIMEOUT_SECONDS = TradingParams.BUY_ORDER_TIMEOUT_SECONDS
-    SELL_ORDER_TIMEOUT_SECONDS = TradingParams.SELL_ORDER_TIMEOUT_SECONDS
-
     def __init__(self):
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
         self.log = print
@@ -42,10 +44,10 @@ class DayTradingBot:
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
         self.valid_pdno_set: set[str] = set()
+        self.is_running = False
 
         self.snapshot_collect_candidates: list[SymbolItem] = []
         self._snapshot_toggle = False
-        self._update_snapshot_collect_candidates()
 
         self.user_manager: KisUserManager = get_kis_user_manager(self.log)
         if len(self.user_manager.users) == 0:
@@ -59,6 +61,31 @@ class DayTradingBot:
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
+
+    def _day_ininitialize(self):
+        # 장 시작 전에 관심 종목 스냅샷 수집 후보 리스트를 업데이트한다.
+        # 서버 기동 시 마스터 파일 다운로드 및 압축 해제
+        self._download_and_extract_master_files()
+        # 관심 종목 스냅샷 수집 후보 리스트 업데이트
+        self._update_snapshot_collect_candidates()
+
+    def _download_and_extract_master_files(self):
+        base_url = "https://new.real.download.dws.co.kr/common/master/"
+        files = ["kospi_code.mst", "kosdaq_code.mst"]
+        info_dir = "./information"
+        os.makedirs(info_dir, exist_ok=True)
+        
+        for file_name in files:
+            zip_url = f"{base_url}{file_name}.zip"
+            self.log(f"Downloading {zip_url}...")
+            try:
+                req = urllib.request.Request(zip_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response:
+                    with zipfile.ZipFile(io.BytesIO(response.read())) as z:
+                        z.extract(file_name, path=info_dir)
+                        self.log(f"Extracted {file_name} to {info_dir}")
+            except Exception as e:
+                self.log(f"Failed to download or extract {file_name}: {e}")
 
     def get_user_app_ids(self) -> List[str]:
         return [user.app_id for user in self.user_manager.users]
@@ -79,9 +106,71 @@ class DayTradingBot:
             bot.display_account_info()
 
     def process_once(self, app_id: str):
+        '''
+        장 시작 여부 확인
+         - 장이 시작되지 않았으면, 장이 시작될 때까지 대기한다.
+         - 장이 시작되면, _process_step 함수를 호출하여 매매 로직을 실행한다.
+        '''
+        now = time.time()
+        local_time = time.localtime(now)
+        date_str = time.strftime("%Y-%m-%d", local_time)
+
+        if getattr(self, '_current_date', None) != date_str:
+            # 날짜가 바뀌었으므로 일별 초기화 작업을 수행한다.
+            self._current_date = date_str
+            self.daily_start_logged = False
+            self.daily_end_logged = False
+            self._day_ininitialize()
+            return
+
+        if not self.is_market_open(now):
+            if self.is_running:
+                # 장이 열려 있다가 닫힌 경우
+                if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
+                    # 모든 봇의 계좌 정보를 업데이트하고 기록한다.
+                    for bot in self.bots.values():
+                        bot.update_account_stock()
+                        bot.record_account_history()
+                    self.daily_end_logged = True
+
+                if local_time.tm_wday >= 5:
+                    self.log("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
+                else:
+                    self.log("장외 시간입니다. 9:00 ~ 15:30 사이에만 동작합니다.")
+
+            self.is_running = False
+            return
+
+        if not self.is_running:
+            # 장이 닫혀 있다가 열린 경우 (장 시작)
+            if not self.daily_start_logged:
+                # 장 시작 시점에 모든 봇의 계좌 정보를 업데이트하고 기록한다.
+                for bot in self.bots.values():
+                    bot.update_account_stock()
+                    bot.record_account_history()
+                self.daily_start_logged = True
+
+        self.is_running = True
+
         bot = self.bots.get(app_id)
         if bot:
-            bot.process_once()
+            bot.process_once(now)
+
+    def is_market_open(self, now: Optional[float] = None) -> bool:
+        if now is None:
+            now = time.time()
+
+        local_time = time.localtime(now)
+        if local_time.tm_wday >= 5:
+            return False
+
+        if local_time.tm_hour < 9:
+            return False
+        if local_time.tm_hour > 15:
+            return False
+        if local_time.tm_hour == 15 and local_time.tm_min > 30:
+            return False
+        return True
 
     def price_analysis_items(self, pdno: str):
         if pdno in self.price_analysis.items:
@@ -254,7 +343,6 @@ class DayTradingSingleBot:
         self.app_id = user.app_id
 
         self.loop_count = 0
-        self.is_running = True
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
         self.monitor_list: list[SymbolItem] = []
@@ -393,7 +481,7 @@ class DayTradingSingleBot:
             state.step = TradeStep.DECIDE_ON_SELL
         elif (
             state.buy_order_requested_at > 0
-            and (time.time() - state.buy_order_requested_at) > self.BUY_ORDER_TIMEOUT_SECONDS
+            and (time.time() - state.buy_order_requested_at) > TradingParams.BUY_ORDER_TIMEOUT_SECONDS
         ):
             try:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
@@ -402,13 +490,13 @@ class DayTradingSingleBot:
                 self.update_account_stock()
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
-                self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
+                self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
                 state.cooldown_until = time.time() + TradingParams.COOLDOWN_AFTER_CANCEL  # 취소 후 쿨다운 적용
                 state.buy_order_no = ""
                 state.buy_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
-                self._symbol_log(symbol_item, f"매수 주문 체결 대기가 {self.BUY_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
+                self._symbol_log(symbol_item, f"매수 주문 체결 대기가 {TradingParams.BUY_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return
 
     def _process_order_sell(self, symbol_item: SymbolItem):
@@ -478,7 +566,7 @@ class DayTradingSingleBot:
             state.step = TradeStep.DECIDE_ON_PURCHASE
         elif (
             state.sell_order_requested_at > 0
-            and (time.time() - state.sell_order_requested_at) > self.parent.SELL_ORDER_TIMEOUT_SECONDS
+            and (time.time() - state.sell_order_requested_at) > TradingParams.SELL_ORDER_TIMEOUT_SECONDS
         ):
             try:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
@@ -487,73 +575,15 @@ class DayTradingSingleBot:
                 self.update_account_stock()
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
-                self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {self.parent.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
+                self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
                 state.sell_order_no = ""
                 state.sell_order_requested_at = 0.0
                 state.step = TradeStep.JUDGE_STEP
             except Exception as e:
-                self._symbol_log(symbol_item, f"매도 주문 체결 대기가 {self.parent.SELL_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
+                self._symbol_log(symbol_item, f"매도 주문 체결 대기가 {TradingParams.SELL_ORDER_TIMEOUT_SECONDS // 60}분을 초과했으나 주문 취소에 실패했습니다: {e}")
             return            
 
-    def is_market_open(self, now: Optional[float] = None) -> bool:
-        if now is None:
-            now = time.time()
-
-        local_time = time.localtime(now)
-        if local_time.tm_wday >= 5:
-            return False
-
-        if local_time.tm_hour < 9:
-            return False
-        if local_time.tm_hour > 15:
-            return False
-        if local_time.tm_hour == 15 and local_time.tm_min > 30:
-            return False
-        return True
-
-    def process_once(self):
-        '''
-        장 시작 여부 확인
-         - 장이 시작되지 않았으면, 장이 시작될 때까지 대기한다.
-         - 장이 시작되면, _process_step 함수를 호출하여 매매 로직을 실행한다.
-        '''
-        now = time.time()
-        local_time = time.localtime(now)
-        date_str = time.strftime("%Y-%m-%d", local_time)
-
-        if getattr(self, '_current_date', None) != date_str:
-            self._current_date = date_str
-            self.daily_start_logged = False
-            self.daily_end_logged = False
-
-            # 만약 봇이 장중에 시작되었다면 시작 로그를 찍도록 설정
-            if self.is_market_open(now):
-                self.is_running = False
-
-        if not self.is_market_open(now):
-            if self.is_running:
-                # 장이 열려 있다가 닫힌 경우
-                if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
-                    self.update_account_stock()
-                    self.record_account_history()
-                    self.daily_end_logged = True
-
-                if local_time.tm_wday >= 5:
-                    self.log("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
-                else:
-                    self.log("장외 시간입니다. 9:00 ~ 15:30 사이에만 동작합니다.")
-
-            self.is_running = False
-            return
-
-        if not self.is_running:
-            # 장이 닫혀 있다가 열린 경우 (장 시작)
-            if not self.daily_start_logged:
-                self.update_account_stock()
-                self.record_account_history()
-                self.daily_start_logged = True
-
-        self.is_running = True
+    def process_once(self, now):
         self._process_step(now)
 
     def record_account_history(self):
@@ -706,7 +736,7 @@ class DayTradingSingleBot:
             })
 
         return {
-            "market_open": self.is_market_open(),
+            "market_open": self.parent.is_market_open(),
             "loop_count": self.loop_count,
             "account": {
                 "tot_evlu_amt": self.auth.account.balance.tot_evlu_amt,
@@ -722,7 +752,7 @@ class DayTradingSingleBot:
     def place_manual_buy(self, pdno: str, quantity: int):
         if quantity <= 0:
             raise ValueError("수량은 1 이상이어야 합니다.")
-        if not self.is_market_open():
+        if not self.parent.is_market_open():
             raise ValueError("장외 시간에는 주문할 수 없습니다.")
 
         if not pdno in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
@@ -738,7 +768,7 @@ class DayTradingSingleBot:
     def place_manual_sell(self, pdno: str, quantity: int):
         if quantity <= 0:
             raise ValueError("수량은 1 이상이어야 합니다.")
-        if not self.is_market_open():
+        if not self.parent.is_market_open():
             raise ValueError("장외 시간에는 주문할 수 없습니다.")
         
         if not pdno in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
