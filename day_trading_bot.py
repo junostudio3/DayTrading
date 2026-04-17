@@ -41,6 +41,7 @@ class DayTradingBot:
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
+        self.valid_pdno_set: set[str] = set()
 
         self.snapshot_collect_candidates: list[SymbolItem] = []
         self._snapshot_toggle = False
@@ -118,6 +119,12 @@ class DayTradingBot:
                 symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol(min_age_seconds=1800)
             else:
                 symbol_item = self.symbol_snapshot_cache.get_high_volume_stale_symbol(min_age_seconds=1800)
+
+            if self.is_valid_pdno(symbol_item.pdno) is False:
+                self.log(f"심볼 스냅샷 캐시에서 가져온 종목이 유효하지 않아 캐시에서 삭제합니다. pdno: {symbol_item.pdno} name: {symbol_item.prdt_name}")
+                self.symbol_snapshot_cache.remove_snapshot(symbol_item.pdno)
+                return
+
             self._snapshot_toggle = not self._snapshot_toggle
         else:
             symbol_item = self.snapshot_collect_candidates.pop(0)
@@ -219,11 +226,12 @@ class DayTradingBot:
         self.snapshot_collect_candidates: list[SymbolItem] = []
         kosdq_records = load_kosdaq_master()
         kospi_records = load_kospi_master()
-        all_records = kospi_records + kosdq_records
+        all_valid_records = kospi_records + kosdq_records
+        self.valid_pdno_set = {getattr(record, 'mksc_shrn_iscd', '') for record in all_valid_records}
 
-        self.log(f"kospi와 kosdaq 항목을 조사하여 관심 종목 스냅샷 수집 후보 리스트를 업데이트합니다. (count={len(all_records)})")
+        self.log(f"kospi와 kosdaq 항목을 조사하여 관심 종목 스냅샷 수집 후보 리스트를 업데이트합니다. (count={len(all_valid_records)})")
 
-        for record in all_records:
+        for record in all_valid_records:
             pdno = getattr(record, 'mksc_shrn_iscd', '')
             name = getattr(record, 'hts_kor_isnm', '')
 
@@ -233,6 +241,9 @@ class DayTradingBot:
 
             stock_item = SymbolItem(pdno, name)
             self.snapshot_collect_candidates.append(stock_item)
+    
+    def is_valid_pdno(self, pdno: str) -> bool:
+        return pdno in self.valid_pdno_set
 
 class DayTradingSingleBot:
     def __init__(self, parent, user: KisUser):
@@ -565,7 +576,7 @@ class DayTradingSingleBot:
             try:
                 with connection.cursor() as cursor:
                     sql = """
-                        INSERT INTO accounthistory 
+                        INSERT INTO `pulsetrade.accounthistory` 
                         (app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, time)
                         VALUES (%s, %s, %s, %s, %s, NOW())
                     """

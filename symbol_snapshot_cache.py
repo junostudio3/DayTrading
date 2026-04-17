@@ -113,3 +113,11 @@ class SymbolSnapshotCache:
         if row:
             return SymbolItem(pdno=row[0], name=row[1])
         return None
+
+    def remove_snapshot(self, symbol: str):
+        """심볼 스냅샷을 삭제한다. 유효하지 않은 심볼이 캐시에 남아있는 경우 이를 제거하기 위해 사용한다."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM symbol_snapshots WHERE pdno = ?', (symbol,))
+        conn.commit()
+        conn.close()

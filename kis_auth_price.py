@@ -1,6 +1,7 @@
 from candlestick import Candlestick
 from kis_auth import KisAuth
 import datetime
+import time
 
 class KisAuthPrice:
     def __init__(self, auth: KisAuth):
@@ -44,20 +45,34 @@ class KisAuthPrice:
             "fid_org_adj_prc": "1", # 수정주가 여부 (0:미수정, 1:수정)
         }
 
-        response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
-                                     "FHKST03010100", # 국내 주식 일간 차트 가격 조회 트랜잭션 ID
-                                     params=params)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("rt_cd") == "0" and "output2" in data and isinstance(data["output2"], list) and len(data["output2"]) > 0:
-                previous_day_data = data["output2"][0] # 가장 최근 일간 데이터 (전일 데이터)
-                price = float(previous_day_data["stck_clpr"]) # 전일 종가
-                volume = int(previous_day_data["acml_vol"]) # 누적 거래량
-                return price, volume
-            raise Exception(f"Failed to get previous day price and volume: {data.get('msg_cd')} {data.get('msg1')}")
-        else:
-            raise Exception(f"Failed to get previous day price and volume: {response.status_code} {response.text}")
+        max_retries = 5
+        retries = 0
+
+        while retries < max_retries:
+            response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                                        "FHKST03010100", # 국내 주식 일간 차트 가격 조회 트랜잭션 ID
+                                        params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("rt_cd") == "0" and "output2" in data and isinstance(data["output2"], list) and len(data["output2"]) > 0:
+                    previous_day_data = data["output2"][0] # 가장 최근 일간 데이터 (전일 데이터)
+                    price = float(previous_day_data["stck_clpr"]) # 전일 종가
+                    volume = int(previous_day_data["acml_vol"]) # 누적 거래량
+                    return price, volume
+                raise Exception(f"Failed to get previous day price and volume: {data.get('msg_cd')} {data.get('msg1')}")
+            else:
+                if getattr(response, "text", None):
+                    # text 안에 '초당 거래건수를 초과하였습니다.' 메시지가 있는지 확인
+                    if "초당 거래건수를 초과하였습니다" in response.text:
+                        # 1초 대기 후 재시도
+                        time.sleep(1)
+                        retries += 1
+                        continue
+
+                raise Exception(f"Failed to get previous day price and volume: {response.status_code} {response.text}")
+
+        raise Exception("초당 거래건수 초과 에러로 인한 최대 재시도 횟수를 초과했습니다.")
 
     def get_one_minute_candlestick(self, pdno: str, hour: int, minute: int, include_past_data: bool = False) -> Candlestick:
         """1분봉 조회"""

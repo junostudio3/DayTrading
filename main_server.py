@@ -197,8 +197,8 @@ async def get_account_history(app_id: str = Query(..., description="User app ID"
         try:
             with connection.cursor() as cursor:
                 sql = """
-                    SELECT id, app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, DATE_FORMAT(time, '%Y-%m-%d %H:%i:%s') as time
-                    FROM accounthistory
+                    SELECT id, app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, DATE_FORMAT(time, '%%Y-%%m-%%d %%H:%%i:%%s') as time
+                    FROM `pulsetrade.accounthistory`
                     WHERE app_id = %s
                     AND time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
                     ORDER BY time ASC
