@@ -50,7 +50,8 @@ class KisAuth:
                 "grant_type": "client_credentials",
                 "appkey": self.api_key,
                 "appsecret": self.secret_key
-            }
+            },
+            timeout=10
         )
         if response.status_code == 200:
             token_info = response.json()
@@ -82,7 +83,7 @@ class KisAuth:
             "tr_id": tr_id
         })
 
-        return requests.get(f"{self.domain}{url}", headers=headers, params=params)
+        return requests.get(f"{self.domain}{url}", headers=headers, params=params, timeout=10)
 
     def request_post(self, url, tr_id, headers, params=None):
         #headers에 authorization, appkey, appsecret를 포함시킨다
@@ -94,4 +95,4 @@ class KisAuth:
             "tr_id": tr_id
         })
 
-        return requests.post(f"{self.domain}{url}", headers=headers, data=json.dumps(params))
+        return requests.post(f"{self.domain}{url}", headers=headers, data=json.dumps(params), timeout=10)

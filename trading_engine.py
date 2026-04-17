@@ -103,6 +103,8 @@ class TradingEngine:
                     self.bot.update_interest_stock_manager(now)
 
                 self.bot.process_once(app_id)
+                time.sleep(0.5)
+
                 snapshot = self.bot.get_dashboard_snapshot(app_id)
                 snapshot["logs"] = self._logs[-100:]
                 snapshot["trade_logs"] = self._trade_logs[-100:]
