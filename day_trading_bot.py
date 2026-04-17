@@ -575,18 +575,40 @@ class DayTradingSingleBot:
             )
             try:
                 with connection.cursor() as cursor:
+                    balance = self.auth.account.balance
+                    tot_evlu_amt = int(balance.tot_evlu_amt)
+                    dnca_tot_amt = int(balance.dnca_tot_amt)
+                    nxdy_excc_amt = int(balance.nxdy_excc_amt)
+                    prvs_rcdl_excc_amt = int(balance.prvs_rcdl_excc_amt)
+
+                    # 이전 기록 조회
+                    cursor.execute(
+                        "SELECT tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt "
+                        "FROM `pulsetrade.accounthistory` "
+                        "WHERE app_id = %s ORDER BY time DESC LIMIT 1",
+                        (self.app_id,)
+                    )
+                    last_record = cursor.fetchone()
+
+                    # 마지막 기록과 비교
+                    if last_record:
+                        if (int(last_record['tot_evlu_amt']) == tot_evlu_amt and
+                            int(last_record['dnca_tot_amt']) == dnca_tot_amt and
+                            int(last_record['nxdy_excc_amt']) == nxdy_excc_amt and
+                            int(last_record['prvs_rcdl_excc_amt']) == prvs_rcdl_excc_amt):
+                            return  # 변경된 값이 없으면 저장하지 않음
+
                     sql = """
                         INSERT INTO `pulsetrade.accounthistory` 
                         (app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, time)
                         VALUES (%s, %s, %s, %s, %s, NOW())
                     """
-                    balance = self.auth.account.balance
                     cursor.execute(sql, (
                         self.app_id,
-                        int(balance.tot_evlu_amt),
-                        int(balance.dnca_tot_amt),
-                        int(balance.nxdy_excc_amt),
-                        int(balance.prvs_rcdl_excc_amt)
+                        tot_evlu_amt,
+                        dnca_tot_amt,
+                        nxdy_excc_amt,
+                        prvs_rcdl_excc_amt
                     ))
                 connection.commit()
             finally:
