@@ -1,20 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { fetchCandles, fetchAccountHistory, fetchUsers, fetchSnapshot, submitOrderRequest } from './api';
 import './App.css';
-
-const API_BASE_URL = 'https://juncom.duckdns.org/day-trading-api';
-
-const fetchWithAuth = async (url: string, options: any = {}) => {
-  const token = localStorage.getItem('PULSE_TRADE_TOKEN');
-  const headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-  const res = await fetch(url, { ...options, headers });
-  if (res.status === 401 || res.status === 403) {
-    localStorage.removeItem('PULSE_TRADE_TOKEN');
-    window.location.reload();
-  }
-  return res;
-};
 
 interface Account {
   tot_evlu_amt?: number;
@@ -99,8 +87,7 @@ function ChartComponent({ pdno }: { pdno: string | null }) {
   useEffect(() => {
     if (!pdno || !seriesRef.current) return;
 
-    fetchWithAuth(`${API_BASE_URL}/candles/${pdno}`)
-      .then((res) => res.json())
+    fetchCandles(pdno)
       .then((data: any[]) => {
         if (data && data.length > 0) {
           const chartData = data.map((c) => ({
@@ -127,9 +114,8 @@ function AccountHistoryChartComponent({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (!userId) return;
-    fetchWithAuth(`${API_BASE_URL}/account_history?app_id=${userId}`)
-      .then((res) => res.json())
-      .then((history) => {
+    fetchAccountHistory(userId)
+      .then((history: any) => {
         if (history && history.length > 0) {
           const chartData = history.map((item: any) => ({
             time: item.time,
@@ -174,9 +160,8 @@ function Dashboard() {
   const logsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchWithAuth(`${API_BASE_URL}/users`)
-      .then((res) => res.json())
-      .then((data) => {
+    fetchUsers()
+      .then((data: any) => {
         if (data && data.length > 0) {
           setUserIds(data);
           setSelectedUser(data[0]);
@@ -188,9 +173,9 @@ function Dashboard() {
   useEffect(() => {
     if (!selectedUser) return;
     
-    const fetchSnapshot = async () => {
+    const getSnapshot = async () => {
       try {
-        const res = await fetchWithAuth(`${API_BASE_URL}/snapshot?app_id=${selectedUser}`);
+        const res = await fetchSnapshot(selectedUser);
         if (res.ok) {
           const data = await res.json();
           setSnapshot(data);
@@ -203,8 +188,8 @@ function Dashboard() {
       }
     };
 
-    fetchSnapshot();
-    const intervalId = setInterval(fetchSnapshot, 1000);
+    getSnapshot();
+    const intervalId = setInterval(getSnapshot, 1000);
     return () => clearInterval(intervalId);
   }, [selectedUser]);
 
@@ -214,7 +199,7 @@ function Dashboard() {
     } else if (tab === 'logs' && logsRef.current) {
       logsRef.current.scrollTop = logsRef.current.scrollHeight;
     }
-  }, [snapshot?.trade_logs, snapshot?.logs, tab]);
+  }, [snapshot?.trade_logs?.length, snapshot?.logs?.length, tab]);
 
   const submitOrder = async () => {
     if (!selectedUser || !orderModal.pdno) return;
@@ -225,16 +210,7 @@ function Dashboard() {
     }
 
     try {
-      const res = await fetchWithAuth(`${API_BASE_URL}/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          app_id: selectedUser,
-          side: orderModal.side,
-          pdno: orderModal.pdno,
-          quantity: qty,
-        }),
-      });
+      const res = await submitOrderRequest(selectedUser, orderModal.side, orderModal.pdno, qty);
       if (res.ok) {
         alert(`${orderModal.side === 'buy' ? '매수' : '매도'} 주문 요청 완료`);
         setOrderModal({ show: false, side: 'buy', pdno: null });
