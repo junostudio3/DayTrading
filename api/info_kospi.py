@@ -201,6 +201,8 @@ def load_kospi_master(filepath: str = None) -> List[KospiCode]:
 		"""
 		if filepath is None:
 				base_dir = os.path.dirname(os.path.abspath(__file__))
+				# base_dir의 상위 폴더로
+				base_dir = os.path.dirname(base_dir)
 				filepath = os.path.join(base_dir, "cache", "information", "kospi_code.mst")
 
 		records: List[KospiCode] = []

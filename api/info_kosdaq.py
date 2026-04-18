@@ -195,6 +195,8 @@ def load_kosdaq_master(filepath: str = None) -> List[KosdaqCode]:
     """
     if filepath is None:
         base_dir = os.path.dirname(os.path.abspath(__file__))
+        # base_dir의 상위 폴더로
+        base_dir = os.path.dirname(base_dir)
         filepath = os.path.join(base_dir, "cache", "information", "kosdaq_code.mst")
 
     records: List[KosdaqCode] = []
