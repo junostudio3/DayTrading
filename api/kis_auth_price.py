@@ -1,5 +1,5 @@
 from candlestick import Candlestick
-from kis_auth import KisAuth
+from api.kis_auth import KisAuth
 import datetime
 import time
 

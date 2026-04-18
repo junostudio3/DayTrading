@@ -1,4 +1,4 @@
-from kis_auth import KisAuth
+from api.kis_auth import KisAuth
 import time
 
 class KisUser:

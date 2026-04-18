@@ -19,13 +19,13 @@ class KisAuth:
         
         self.token_cache_file = os.path.join(self.cache_dir, "access_token.json")
 
-        from kis_auth_price import KisAuthPrice
+        from api.kis_auth_price import KisAuthPrice
         self.price = KisAuthPrice(self)
 
-        from kis_auth_account import KisAuthAccount
+        from api.kis_auth_account import KisAuthAccount
         self.account = KisAuthAccount(self, account)
 
-        from kis_auth_order import KisAuthOrder
+        from api.kis_auth_order import KisAuthOrder
         self.order = KisAuthOrder(self)
     
     def delete_token(self):
