@@ -43,6 +43,12 @@ class TradeReporter:
         self.bot_parent = self.bot.parent
         self.account_balance: AccountBalance = None
 
+        # app_id 별로 ./report/ 폴더 아래에 리포트 파일을 저장하기 위한 폴더 생성
+        app_id = self.bot.app_id
+        self.base_folder = f"./report/{app_id}"
+        if not os.path.exists(self.base_folder):
+            os.makedirs(self.base_folder)
+
     def set_account_balance(self, account_balance: AccountBalance):
         self.account_balance = account_balance
 
@@ -79,7 +85,7 @@ class TradeReporter:
 
         # ./report/ 폴더에 거래 기록을 텍스트 파일의 끝에 추가한다. (파일명: YYYY-MM-DD.txt)
         date_str = time.strftime("%Y-%m-%d", time.localtime())
-        log_file_path = f"./report/{date_str}.txt"
+        log_file_path = os.path.join(self.base_folder, f"{date_str}.txt")
         try:
             is_new_file = not os.path.exists(log_file_path)
             with open(log_file_path, "a", encoding="utf-8") as f:

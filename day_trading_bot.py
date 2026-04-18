@@ -72,7 +72,7 @@ class DayTradingBot:
     def _download_and_extract_master_files(self):
         base_url = "https://new.real.download.dws.co.kr/common/master/"
         files = ["kospi_code.mst", "kosdaq_code.mst"]
-        info_dir = "./information"
+        info_dir = "./cache/information"
         os.makedirs(info_dir, exist_ok=True)
         
         for file_name in files:
