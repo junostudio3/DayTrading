@@ -3,7 +3,7 @@ import time
 
 class KisUser:
     def __init__(self, id, key, secret, account, is_virtual, log):
-        self.app_id = id
+        self.app_id = f"{id}-{account}"
         self.app_key = key
         self.app_secret = secret
         self.app_account = account
@@ -39,9 +39,9 @@ class KisUserManager:
         user = KisUser(id, key, secret, account, is_virtual, self.log)
         self.users.append(user)
 
-    def find_user(self, id) -> KisUser:
+    def find_user(self, app_id) -> KisUser:
         for user in self.users:
-            if user.app_id == id:
+            if user.app_id == app_id:
                 return user
         return None
 

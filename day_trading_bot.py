@@ -423,9 +423,15 @@ class DayTradingSingleBot:
         if pdno not in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
             return
 
-        max_budget = 1000000
+        budget = self.auth.account.balance.dnca_tot_amt
+        # 수수료를 감안하여 budget에 여유를 둔다. (약 만원 정도 여유를 둔다고 가정)
+        # 어차피 비싼 종목은 사지 않게 되어 있으므로 큰 문제가 되지는 않을 것이다.
+        budget = max(0, budget - 10000)
+        # 최대 100만원까지 투자하도록 제한한다.
+        budget = min(budget, 1000000) 
+
         current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
-        quantity = int(max_budget // current_price)
+        quantity = int(budget // current_price)
         if quantity <= 0:
             return
 
