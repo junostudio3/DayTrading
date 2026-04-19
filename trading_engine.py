@@ -99,8 +99,7 @@ class TradingEngine:
                 self._process_orders()
                 if user_index == 0:
                     now = time.time()
-                    self.bot.update_market_data(now)
-                    self.bot.update_interest_stock_manager(now)
+                    self.bot.update_market_and_stock_data(now)
 
                 self.bot.process_once(app_id)
                 time.sleep(0.5)

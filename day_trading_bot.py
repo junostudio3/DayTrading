@@ -2,7 +2,9 @@ from api.kis_auth import KisAuth
 from api.kis_auth_order import OrderCheckResult
 from api.kis_user import KisUser
 from api.kis_user import KisUserManager
+from api.special_days import SpecialDays
 from KisKey import get_kis_user_manager
+from KisKey import data_go_kr_api_key
 from api.info_kosdaq import load_kosdaq_master
 from api.info_kospi import load_kospi_master
 from price_analysis import PriceAnalysis
@@ -62,12 +64,34 @@ class DayTradingBot:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
 
-    def _day_ininitialize(self):
+    def _day_ininitialize(self, now: float) -> bool:
+        local_time = time.localtime(now)
+        date_str = time.strftime("%Y-%m-%d", local_time)
+
         # 장 시작 전에 관심 종목 스냅샷 수집 후보 리스트를 업데이트한다.
         # 서버 기동 시 마스터 파일 다운로드 및 압축 해제
         self._download_and_extract_master_files()
         # 관심 종목 스냅샷 수집 후보 리스트 업데이트
         self._update_snapshot_collect_candidates()
+        get_holiday_success = False
+        for loop in range(5):
+            try:
+                self._is_now_holiday = SpecialDays.is_holiday(local_time, data_go_kr_api_key)
+                get_holiday_success = True
+                break
+            except Exception as e:
+                time.sleep(1)  # 잠시 대기 후 재시도
+
+        if not get_holiday_success:
+            self._is_now_holiday = False
+            self.log("공휴일API는 쓸대없는 동작을 방지하기 위한 참고용 정보이므로, API 요청에 실패하더라도 오늘이 휴일이 아닌 것으로 간주하고 봇을 동작시킵니다.")
+
+        self._current_date = date_str
+        self.daily_start_logged = False
+        self.daily_end_logged = False
+        if self._is_now_holiday:
+            self.log(f"오늘은 {date_str}로 휴일입니다. 봇이 동작하지 않습니다.")
+        return True
 
     def _download_and_extract_master_files(self):
         base_url = "https://new.real.download.dws.co.kr/common/master/"
@@ -105,7 +129,27 @@ class DayTradingBot:
         for bot in self.bots.values():
             bot.display_account_info()
 
+    def update_market_and_stock_data(self, now: float):
+        local_time = time.localtime(now)
+        date_str = time.strftime("%Y-%m-%d", local_time)
+
+        if getattr(self, '_current_date', None) != date_str:
+            # 날짜가 바뀌었으므로 일별 초기화 작업을 수행한다.
+            self._day_ininitialize(now)
+            return
+
+        if getattr(self, '_is_now_holiday', False):
+            # 오늘이 휴일인 경우에는 아무 작업도 하지 않는다.
+            return
+
+        self._update_market_data(now)
+        self._update_interest_stock_manager(now)
+
     def process_once(self, app_id: str):
+        if getattr(self, '_current_date', None) == None:
+            # 현재 날짜 정보가 없으므로 대기한다.
+            return
+
         '''
         장 시작 여부 확인
          - 장이 시작되지 않았으면, 장이 시작될 때까지 대기한다.
@@ -113,14 +157,9 @@ class DayTradingBot:
         '''
         now = time.time()
         local_time = time.localtime(now)
-        date_str = time.strftime("%Y-%m-%d", local_time)
 
-        if getattr(self, '_current_date', None) != date_str:
-            # 날짜가 바뀌었으므로 일별 초기화 작업을 수행한다.
-            self._current_date = date_str
-            self.daily_start_logged = False
-            self.daily_end_logged = False
-            self._day_ininitialize()
+        if getattr(self, '_is_now_holiday', False):
+            # 오늘이 휴일인 경우에는 아무 작업도 하지 않는다.
             return
 
         if not self.is_market_open(now):
@@ -193,7 +232,7 @@ class DayTradingBot:
             return bot.get_dashboard_snapshot()
         return None
 
-    def update_interest_stock_manager(self, now: float):
+    def _update_interest_stock_manager(self, now: float):
         # 8시부터 4시 30분 사이에만 관심 종목을 탐색한다.
         # 미리 준비하는 목적이어서 장 시작 조금 전부터 탐색을 시작한다.
         current_time = time.localtime(now)
@@ -249,7 +288,7 @@ class DayTradingBot:
             for bot in self.bots.values():
                 bot.update_sell_list()
 
-    def update_market_data(self, now: float):
+    def _update_market_data(self, now: float):
         # 모든 봇의 모니터링 리스트에서 중복을 제거한 관심 종목을 추출
         # 이것들의 현재가를 업데이트한다. 업데이트된 가격은 price_analysis에 저장된다.
 
@@ -905,8 +944,7 @@ if __name__ == "__main__":
     user_app_ids = bot.get_user_app_ids()
     while True:
         now = time.time()
-        bot.update_market_data(now)
-        bot.update_interest_stock_manager(now)
+        bot.update_market_and_stock_data(now)
 
         for app_id in user_app_ids:
             bot.process_once(app_id)
