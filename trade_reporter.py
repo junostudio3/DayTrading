@@ -4,7 +4,7 @@ import time
 import os
 from enum import Enum, auto
 from filter import TradingParams
-from telegram_sender import send_telegram_message
+from telegram import Telegram
 
 class TradeType(Enum):
     BUY = auto()
@@ -99,7 +99,7 @@ class TradeReporter:
                     
             # 텔레그램 알림 전송 (정상 기록된 경우)
             balance_str = self.account_balance.tot_evlu_amt if self.account_balance else "N/A"
-            send_telegram_message(f"🔔 <b>[거래 발생]</b>\n[잔고: {balance_str}]\n{text}")
+            Telegram.send_message(f"🔔 <b>[거래 발생]</b>\n[잔고: {balance_str}]\n{text}")
                     
         except Exception as e:
             print(f"Failed to write trade log to {log_file_path}: {e}")

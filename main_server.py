@@ -30,8 +30,7 @@ from pydantic import BaseModel
 
 from day_trading_bot import DayTradingBot
 from trading_engine import TradingEngine
-from telegram_sender import send_telegram_message
-from telegram_sender import send_telegram_server_power_log
+from telegram import Telegram
 
 # 설정
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +58,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     crash_logger.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     
     tb_str = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    send_telegram_message(f"🚨 <b>[서버 크래시 발생 - Uncaught]</b>\n<pre>{tb_str[:3800]}</pre>")
+    Telegram.send_message(f"🚨 <b>[서버 크래시 발생 - Uncaught]</b>\n<pre>{tb_str[:3800]}</pre>")
 
 sys.excepthook = handle_exception
 
@@ -76,7 +75,7 @@ async def lifespan(app: FastAPI):
     engine = TradingEngine(bot, interval_seconds=1)
     engine.start()
     logger.info("TradingEngine started.")
-    send_telegram_server_power_log("🟢 <b>[서버 시작]</b> Day Trading Bot 트레이딩 엔진이 기동되었습니다.")
+    Telegram.send_power_log_message("🟢 <b>[서버 시작]</b> Day Trading Bot 트레이딩 엔진이 기동되었습니다.")
     
     yield  # 서버 실행 중
     
@@ -84,7 +83,7 @@ async def lifespan(app: FastAPI):
     if engine:
         engine.stop()
     logger.info("Shutdown complete.")
-    send_telegram_server_power_log("🔴 <b>[서버 종료]</b> Day Trading Bot 서버가 안전하게 종료되었습니다.", sync=True)
+    Telegram.send_power_log_message("🔴 <b>[서버 종료]</b> Day Trading Bot 서버가 안전하게 종료되었습니다.", sync=True)
 
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -105,7 +104,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     crash_logger.error(f"Global exception on {request.url.path}: {exc}", exc_info=True)
     
     tb_str = "".join(traceback.format_exception_only(type(exc), exc))
-    send_telegram_message(f"🚨 <b>[API 서버 내부 오류]</b>\n경로: {request.url.path}\n<pre>{tb_str[:3800]}</pre>")
+    Telegram.send_message(f"🚨 <b>[API 서버 내부 오류]</b>\n경로: {request.url.path}\n<pre>{tb_str[:3800]}</pre>")
     
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 

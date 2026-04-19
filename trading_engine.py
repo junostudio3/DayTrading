@@ -4,7 +4,7 @@ import threading
 import time
 import traceback
 from typing import Any
-from telegram_sender import send_telegram_message
+from telegram import Telegram
 
 from day_trading_bot import DayTradingBot
 
@@ -122,7 +122,7 @@ class TradingEngine:
                         f.write("-" * 80 + "\n")
                         
                     # 텔레그램 크래시 알림 전송 (콜스택이 너무 길 수 있으므로 3800자로 자름)
-                    send_telegram_message(f"🚨 <b>[엔진 루프 크래시 발생]</b>\n<pre>{tb_str[:3800]}</pre>")
+                    Telegram.send_message(f"🚨 <b>[엔진 루프 크래시 발생]</b>\n<pre>{tb_str[:3800]}</pre>")
                 except Exception:
                     pass
 

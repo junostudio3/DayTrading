@@ -3,10 +3,7 @@
 ## 실행 방법
 
 - 기존 콘솔 모드 실행
-	- `python main.py`
-
-- TUI 모드 실행
-	- `python main_tui.py`
+	- `python main_server.py`
 
 ## TUI 단축키
 

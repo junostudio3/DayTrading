@@ -64,5 +64,3 @@ class PriceAnalysis:
         if pdno in self.items:
             return self.items[pdno].is_sell_stop_loss_recommended(purchase_price)
         return False
-
-
