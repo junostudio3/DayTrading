@@ -8,11 +8,13 @@ from common_structure import SymbolItem
 
 
 class InterestStockItem:
-    def __init__(self, pdno: str, prdt_name: str, price: float, volume: int, added_at: float):
+    def __init__(self, pdno: str, prdt_name: str, price: float, volume: int, remaining_time: float, last_profit_at: float = 0, last_loss_at: float = 0):
         self.stock = SymbolItem(pdno, prdt_name)
         self.price = price
         self.volume = volume
-        self.added_at = added_at
+        self.remaining_time = remaining_time
+        self.last_profit_at = last_profit_at
+        self.last_loss_at = last_loss_at
 
 
 class InterestStockManager:
@@ -33,10 +35,12 @@ class InterestStockManager:
                         prdt_name = record.get("prdt_name", "")
                         price = item.get("price", 0)
                         volume = item.get("volume", 0)
-                        added_at = item.get("added_at", time.time())
+                        remaining_time = item.get("remaining_time", TradingParams.STOCK_EXPIRY_DAYS * 6.5 * 3600)
+                        last_profit_at = item.get("last_profit_at", 0)
+                        last_loss_at = item.get("last_loss_at", 0)
                         if self.is_avoided(pdno, prdt_name, price, volume):
                             continue
-                        self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, added_at))
+                        self.buy_list.append(InterestStockItem(pdno, prdt_name, price, volume, remaining_time, last_profit_at, last_loss_at))
             except Exception as e:
                 print(f"Failed to load interest stocks from {self.cache_file_path}: {e}")
                 self.buy_list = []
@@ -56,7 +60,9 @@ class InterestStockManager:
                         },
                         "price": item.price,
                         "volume": item.volume,
-                        "added_at": "" if item.added_at is None else item.added_at
+                        "remaining_time": item.remaining_time,
+                        "last_profit_at": item.last_profit_at,
+                        "last_loss_at": item.last_loss_at
                     }
                     for item in self.buy_list
                 ]
@@ -70,25 +76,40 @@ class InterestStockManager:
         self.buy_list = []
         self.save()
 
-    def _count_trading_days(self, from_ts: float, to_ts: float) -> int:
-        """from_ts ~ to_ts 사이의 영업일(월~금) 수를 계산한다."""
-        start = date.fromtimestamp(from_ts)
-        end = date.fromtimestamp(to_ts)
-        count = 0
-        current = start
-        while current < end:
-            current += timedelta(days=1)
-            if current.weekday() < 5:
-                count += 1
-        return count
+    def tick(self, seconds: float):
+        """일정 시간마다 잔여 시간을 감소시킨다. (장시간 동안 동작 시 호출됨)"""
+        for item in self.buy_list:
+            item.remaining_time -= seconds
+        self._purge_expired()
+
+    def apply_trade_result(self, pdno: str, is_profit: bool):
+        """매도 결과(수익/손실)에 따라 잔여 시간을 연장하거나 단축한다."""
+        now = time.time()
+        changed = False
+        for item in self.buy_list:
+            if item.stock.pdno == pdno:
+                if is_profit:
+                    if now - item.last_profit_at > 20 * 60:
+                        item.remaining_time += 6.5 * 3600
+                        item.last_profit_at = now
+                        changed = True
+                else:
+                    if now - item.last_loss_at > 20 * 60:
+                        item.remaining_time -= 3 * 3600
+                        item.last_loss_at = now
+                        changed = True
+                break
+        
+        if changed:
+            self.save()
+            self._purge_expired()
 
     def _purge_expired(self):
-        """만료 기간(영업일 기준)이 지난 종목을 자동 제거한다."""
-        now = time.time()
+        """잔여 시간이 0 이하가 된 종목을 자동 제거한다."""
         before = len(self.buy_list)
         self.buy_list = [
             item for item in self.buy_list
-            if self._count_trading_days(item.added_at, now) <= TradingParams.STOCK_EXPIRY_DAYS
+            if item.remaining_time > 0
         ]
         if len(self.buy_list) != before:
             self.save()
@@ -137,7 +158,8 @@ class InterestStockManager:
                 return False
             self.buy_list.pop()
 
-        self.buy_list.append(InterestStockItem(pdno, name, price, volume, time.time()))
+        initial_time = TradingParams.STOCK_EXPIRY_DAYS * 6.5 * 3600
+        self.buy_list.append(InterestStockItem(pdno, name, price, volume, initial_time))
         self.buy_list.sort(key=lambda x: x.volume, reverse=True)
         self.save()
 

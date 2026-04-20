@@ -599,12 +599,21 @@ class DayTradingSingleBot:
         check_order_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
 
         if check_order_result is not None and check_order_result.rmn_qty == 0:
+            pdno = symbol_item.pdno
+            inventory = self._find_inventory(pdno)
+            purchase_price = float(inventory['pchs_avg_pric']) if inventory else 0.0
+
             # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
             self.update_account_stock()
 
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
+            
+            if purchase_price > 0:
+                is_profit = float(check_order_result.ord_unpr) > purchase_price
+                self.parent.interest_stock_manager.apply_trade_result(pdno, is_profit)
+
             # 매도 후 해당 종목의 재진입을 금지하여 잦은 휩쏘로 인한 뇌동매매를 강도높게 방지한다.
             state.cooldown_until = time.time() + TradingParams.COOLDOWN_AFTER_SELL
             state.step = TradeStep.DECIDE_ON_PURCHASE
@@ -941,9 +950,14 @@ if __name__ == "__main__":
     bot = DayTradingBot()
     bot.display_account_info()
     user_app_ids = bot.get_user_app_ids()
+    last_tick_time = time.time()
+
     while True:
         now = time.time()
         bot.update_market_and_stock_data(now)
+        if now - last_tick_time >= 600:
+            bot.interest_stock_manager.tick(600)
+            last_tick_time = now
 
         for app_id in user_app_ids:
             bot.process_once(app_id)
