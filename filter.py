@@ -76,6 +76,10 @@ class TradingParams:
 
 class SymbolFilter:
     def is_not_interested_by_name(name: str) -> bool:
+        if "인텍플러스" in name:
+            # 관심없음
+            return True
+
         if "(A" in name or "(C" in name or "-e" in name or "공모주" in name:
             # 공모펀드 등은 제외한다
             return True
