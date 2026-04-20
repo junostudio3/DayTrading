@@ -36,7 +36,7 @@ class TradeState:
     cooldown_until: float = 0.0
 
 
-class DayTradingBot:
+class TradeBot:
     def __init__(self):
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
         self.log = print
@@ -59,10 +59,10 @@ class DayTradingBot:
             # 가격 조회 서비스 초기화
             self._market_data_service = MarketDataService(self.user_manager.users[0].auth)
 
-        self.bots: dict[str, DayTradingSingleBot] = {}
+        self.bots: dict[str, TradeSingleBot] = {}
         for user in self.user_manager.users:
             try:
-                bot = DayTradingSingleBot(self, user)
+                bot = TradeSingleBot(self, user)
                 self.bots[user.app_id] = bot
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
@@ -372,7 +372,7 @@ class DayTradingBot:
     def is_valid_pdno(self, pdno: str) -> bool:
         return pdno in self.valid_pdno_set
 
-class DayTradingSingleBot:
+class TradeSingleBot:
     def __init__(self, parent, user: KisUser):
         self.parent = parent
         self.log = parent.log
@@ -947,7 +947,7 @@ class DayTradingSingleBot:
         return None
 
 if __name__ == "__main__":
-    bot = DayTradingBot()
+    bot = TradeBot()
     bot.display_account_info()
     user_app_ids = bot.get_user_app_ids()
     last_tick_time = time.time()

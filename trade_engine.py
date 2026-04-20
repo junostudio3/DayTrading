@@ -6,11 +6,11 @@ import traceback
 from typing import Any
 from telegram import Telegram
 
-from day_trading_bot import DayTradingBot
+from trade_bot import TradeBot
 
 
-class TradingEngine:
-    def __init__(self, bot: DayTradingBot, interval_seconds: int = 1):
+class TradeEngine:
+    def __init__(self, bot: TradeBot, interval_seconds: int = 1):
         self.bot = bot
         # 엔진에서 발생하는 모든 로그 메시지가 _append_log를 통해 처리되도록 봇의 log 속성을 후킹합니다.
         # 이렇게 하면 봇에서 발생하는 자동 주문 관련 메시지도 엔진 로그에 나타나게 됩니다.

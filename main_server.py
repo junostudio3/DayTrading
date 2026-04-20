@@ -28,8 +28,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from day_trading_bot import DayTradingBot
-from trading_engine import TradingEngine
+from trade_bot import TradeBot
+from trade_engine import TradeEngine
 from telegram import Telegram
 
 # 설정
@@ -71,8 +71,8 @@ async def lifespan(app: FastAPI):
     global bot, engine
     logger.info("Initializing DayTradingBot and TradingEngine...")
     
-    bot = DayTradingBot()
-    engine = TradingEngine(bot, interval_seconds=1)
+    bot = TradeBot()
+    engine = TradeEngine(bot, interval_seconds=1)
     engine.start()
     logger.info("TradingEngine started.")
     Telegram.send_power_log_message("🟢 <b>[서버 시작]</b> Day Trading Bot 트레이딩 엔진이 기동되었습니다.")
