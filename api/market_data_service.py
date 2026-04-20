@@ -3,7 +3,7 @@ from api.kis_auth import KisAuth
 import datetime
 import time
 
-class KisAuthPrice:
+class MarketDataService:
     def __init__(self, auth: KisAuth):
         self.auth = auth
 
@@ -114,10 +114,6 @@ class KisAuthPrice:
             raise Exception(f"Failed to get candlestick data: {data.get('msg_cd')} {data.get('msg1')}")
         else:
             raise Exception(f"Failed to get candlestick data: {response.status_code} {response.text}")
-
-    def get_current(self, pdno: str):
-        price, _ = self.get_current_price_and_accumulated_volume(pdno)
-        return price
 
     def get_current_price_and_accumulated_volume(self, pdno: str):
         """현재가와 누적 거래량 조회"""

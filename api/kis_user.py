@@ -15,7 +15,7 @@ class KisUser:
         else:
             self.app_domain = "https://openapi.koreainvestment.com:9443"
 
-        self.auth = KisAuth(self.app_key, self.app_secret, self.app_account, self.app_is_virtual, self.app_domain)
+        self.auth = KisAuth(self.app_id, self.app_key, self.app_secret, self.app_account, self.app_is_virtual, self.app_domain)
         self.update_account()
 
     def update_account(self):

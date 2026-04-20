@@ -5,7 +5,8 @@ import json
 
 
 class KisAuth:
-    def __init__(self, api_key, secret_key, account, is_virtual, domain):
+    def __init__(self, app_id, api_key, secret_key, account, is_virtual, domain):
+        self.app_id = app_id
         self.api_key = api_key
         self.secret_key = secret_key
         self.is_virtual = is_virtual
@@ -13,14 +14,11 @@ class KisAuth:
         self.domain = domain
 
         # cache 폴더는 현재 디렉토리에 생성됩니다. 필요에 따라 경로를 변경할 수 있습니다.
-        self.cache_dir = "./cache"
+        self.cache_dir = f"./cache/{self.app_id}/"
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
         
         self.token_cache_file = os.path.join(self.cache_dir, "access_token.json")
-
-        from api.kis_auth_price import KisAuthPrice
-        self.price = KisAuthPrice(self)
 
         from api.kis_auth_account import KisAuthAccount
         self.account = KisAuthAccount(self, account)

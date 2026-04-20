@@ -1,5 +1,6 @@
 from api.kis_auth import KisAuth
 from api.kis_auth_order import OrderCheckResult
+from api.market_data_service import MarketDataService
 from api.kis_user import KisUser
 from api.kis_user import KisUserManager
 from api.special_days import SpecialDays
@@ -41,7 +42,7 @@ class DayTradingBot:
         self.log = print
         self.trade_log = None
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
-        self.price_analysis = PriceAnalysis("./cache")
+        self.price_analysis = PriceAnalysis("./cache/price_analysis/")
         self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
@@ -54,6 +55,9 @@ class DayTradingBot:
         self.user_manager: KisUserManager = get_kis_user_manager(self.log)
         if len(self.user_manager.users) == 0:
             raise ValueError("사용자 정보가 없습니다. KisKey.py 파일을 확인해주세요.")
+        else:
+            # 가격 조회 서비스 초기화
+            self._market_data_service = MarketDataService(self.user_manager.users[0].auth)
 
         self.bots: dict[str, DayTradingSingleBot] = {}
         for user in self.user_manager.users:
@@ -267,9 +271,7 @@ class DayTradingBot:
 
         try:
             # 관심 종목의 전일 종가와 거래량을 조회하여 관심 종목 리스트를 업데이트한다.
-            # 탐색은 누가 해도 같으므로 첫번째 사용자의 인증 정보로 조회한다.
-            first_bot = self.bots.get(self.user_manager.users[0].app_id)
-            price, volume = first_bot.auth.price.get_previous_day_price_and_volume(pdno)
+            price, volume = self._market_data_service.get_previous_day_price_and_volume(pdno)
 
             if price is None or volume is None:
                 return
@@ -325,11 +327,8 @@ class DayTradingBot:
                 current_time = time.localtime(now)
                 hour = current_time.tm_hour
                 minute = current_time.tm_min
-                first_bot = self.bots.get(self.user_manager.users[0].app_id)
-                if first_bot is None:
-                    return None
                     
-                candle = first_bot.auth.price.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
+                candle = self._market_data_service.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
                 # candle 데이터중 첫번째 (가장 최근 데이터)의 현재가와 체결량을 가져온다.)
                 if candle is None:
                     raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")

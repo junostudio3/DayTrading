@@ -45,7 +45,19 @@ class KisAuthOrder:
     
     def immediately_sell(self, pdno: str, quantity: int):
         """즉시 매도 주문 (시장가)"""
-        return self.order_cash(pdno, quantity, price=0, is_buy=False, division=OrderDivision.MARKET)
+        division = OrderDivision.MARKET
+        price = 0 # 시장가 주문에서는 가격은 의미없다 
+        if self.auth.is_virtual:
+            # 모의 투자에서는 시장가 주문이 지원되지 않으므로, 지정가 주문으로 대체한다.
+            # 시장가 주문 대신 현재가 캔들스틱의 종가를 주문 가격으로 사용한다.
+            from api.market_data_service import MarketDataService
+            candle = MarketDataService(self.auth).get_one_minute_candlestick(pdno, datetime.datetime.now().hour, datetime.datetime.now().minute)
+            if candle:
+                price = int(candle.close_price)
+                division = OrderDivision.SETTLE
+            else:
+                raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
+        return self.order_cash(pdno, quantity, price=price, is_buy=False, division=division)
     
     # 매수/매도 체결 확인
     def order_check(self, pd_no: str, order_no: str, is_buy: bool) -> List[OrderCheckResult]:
@@ -126,16 +138,6 @@ class KisAuthOrder:
     # 매수/매도 주문 관련
     def order_cash(self, pdno: str, quantity: int, price: int, is_buy: bool, division: OrderDivision):
         """현금 매수/매도 주문"""
-
-        if self.auth.is_virtual and division == OrderDivision.MARKET:
-            # 모의 투자에서는 시장가 주문이 지원되지 않으므로, 지정가 주문으로 대체한다.
-            # 시장가 주문 대신 현재가 캔들스틱의 종가를 주문 가격으로 사용한다.
-            candle = self.auth.price.get_one_minute_candlestick(pdno, datetime.datetime.now().hour, datetime.datetime.now().minute)
-            if candle:
-                price = int(candle.close_price)
-                division = OrderDivision.SETTLE
-            else:
-                raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
 
         params = {
             "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
