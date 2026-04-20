@@ -152,11 +152,8 @@ class InterestStockManager:
             self._purge_expired()
 
         if len(self.buy_list) >= max_count:
-            # 여전히 꽉 차 있으면 최하위 거래량 종목을 교체
-            self.buy_list.sort(key=lambda x: x.volume, reverse=True)
-            if volume <= self.buy_list[-1].volume:
-                return False
-            self.buy_list.pop()
+            # 여전히 꽉 차 있으면 추가 진입 불가
+            return False
 
         initial_time = TradingParams.STOCK_EXPIRY_DAYS * 6.5 * 3600
         self.buy_list.append(InterestStockItem(pdno, name, price, volume, initial_time))
