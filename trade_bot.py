@@ -38,6 +38,8 @@ class TradeState:
 
 class TradeBot:
     def __init__(self):
+        import threading
+        self._price_lock = threading.Lock()
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
         self.log = print
         self.trade_log = None
@@ -306,22 +308,22 @@ class TradeBot:
                 if item.pdno not in monitor_dict:
                     monitor_dict[item.pdno] = item
 
-        for symbol_item in monitor_dict.values():
-            self._update_price(symbol_item, now)
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(self._update_price, symbol_item, now) for symbol_item in monitor_dict.values()]
+            concurrent.futures.wait(futures)
 
-    def _update_price(self, symbol_item: SymbolItem, now: Optional[float] = None, force: bool = False) -> Optional[float]:
+    def _update_price(self, symbol_item: SymbolItem, now: float, force: bool = False):
         """단일 종목의 현재가 조회"""
-        if now is None:
-            now = time.time()
-
-        cached_item = self.price_analysis.items.get(symbol_item.pdno)
-        if not force:
-            last_update_at = self.last_price_update_at.get(symbol_item.pdno, 0.0)
-            if now - last_update_at < self.price_update_interval_sec:
-                if cached_item is not None and cached_item.candle_stick_5minute:
-                    return cached_item.candle_stick_5minute[-1].close_price
+        with self._price_lock:
+            cached_item = self.price_analysis.items.get(symbol_item.pdno)
+            if not force:
+                last_update_at = self.last_price_update_at.get(symbol_item.pdno, 0.0)
+                if now - last_update_at < self.price_update_interval_sec:
+                    return
 
         error_count = 0
+        candle = None
         while error_count < 5:
             try:
                 current_time = time.localtime(now)
@@ -338,16 +340,20 @@ class TradeBot:
                 error_count += 1
                 if error_count >= 5:
                     self.log(f"Error fetching current price for {symbol_item.pdno} after 5 attempts: {e}")
-                    return None
+                    return
 
                 time.sleep(1)  # 잠시 대기 후 재시도
                 continue
 
-        self.last_price_update_at[symbol_item.pdno] = now
+        if candle is None:
+            return
 
-        if self.price_analysis.add_price(symbol_item, candle):
-            # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
-            print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {candle.close_price} / 거래량: {candle.volume}")
+        with self._price_lock:
+            self.last_price_update_at[symbol_item.pdno] = now
+
+            if self.price_analysis.add_price(symbol_item, candle):
+                # 가격이 업데이트된 경우에만 로그에 남기기에는 너무 많으므로 콘솔에 출력함
+                print(f"[{symbol_item.pdno}] {symbol_item.prdt_name} / 현재가: {candle.close_price} / 거래량: {candle.volume}")
 
     def _update_snapshot_collect_candidates(self):
         self.snapshot_collect_candidates: list[SymbolItem] = []
