@@ -49,7 +49,7 @@ class TradeBot:
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
         self.valid_pdno_set: set[str] = set()
-        self.is_running = False
+        self.is_running = None
 
         self.snapshot_collect_candidates: list[SymbolItem] = []
         self._snapshot_toggle = False
@@ -95,6 +95,8 @@ class TradeBot:
         self._current_date = date_str
         self.daily_start_logged = False
         self.daily_end_logged = False
+        self.is_running = None
+
         if self._is_now_holiday:
             self.log(f"오늘은 {date_str}로 휴일입니다. 봇이 동작하지 않습니다.")
         return True
@@ -147,6 +149,14 @@ class TradeBot:
         if getattr(self, '_is_now_holiday', False):
             # 오늘이 휴일인 경우에는 아무 작업도 하지 않는다.
             return
+    
+        if self.is_running is False:
+            return
+        
+        if self.is_running is None:
+            # is_running이 None인 경우는 서버가 처음 시작된 직후이다
+            # 한번은 업데이트를 시도하고 is_running을 False로 설정한다
+            self.is_running = False
 
         self._update_market_data(now)
         self._update_interest_stock_manager(now)
@@ -169,7 +179,7 @@ class TradeBot:
             return
 
         if not self.is_market_open(now):
-            if self.is_running:
+            if self.is_running is True:
                 # 장이 열려 있다가 닫힌 경우
                 if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
                     # 모든 봇의 계좌 정보를 업데이트하고 기록한다.
@@ -186,7 +196,7 @@ class TradeBot:
             self.is_running = False
             return
 
-        if not self.is_running:
+        if self.is_running is False:
             # 장이 닫혀 있다가 열린 경우 (장 시작)
             if not self.daily_start_logged:
                 # 장 시작 시점에 모든 봇의 계좌 정보를 업데이트하고 기록한다.
