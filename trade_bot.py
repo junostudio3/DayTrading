@@ -70,7 +70,7 @@ class TradeBot:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
 
-    def _day_ininitialize(self, now: float) -> bool:
+    def _day_initialize(self, now: float) -> bool:
         local_time = time.localtime(now)
         date_str = time.strftime("%Y-%m-%d", local_time)
 
@@ -143,7 +143,7 @@ class TradeBot:
 
         if getattr(self, '_current_date', None) != date_str:
             # 날짜가 바뀌었으므로 일별 초기화 작업을 수행한다.
-            self._day_ininitialize(now)
+            self._day_initialize(now)
             return
 
         if getattr(self, '_is_now_holiday', False):
@@ -263,6 +263,9 @@ class TradeBot:
                 symbol_item = self.symbol_snapshot_cache.get_oldest_snapshot_symbol(min_age_seconds=1800)
             else:
                 symbol_item = self.symbol_snapshot_cache.get_high_volume_stale_symbol(min_age_seconds=1800)
+
+            if symbol_item is None:
+                return
 
             if self.is_valid_pdno(symbol_item.pdno) is False:
                 self.log(f"심볼 스냅샷 캐시에서 가져온 종목이 유효하지 않아 캐시에서 삭제합니다. pdno: {symbol_item.pdno} name: {symbol_item.prdt_name}")
