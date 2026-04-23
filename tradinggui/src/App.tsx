@@ -164,7 +164,12 @@ function Dashboard() {
       .then((data: any) => {
         if (data && data.length > 0) {
           setUserIds(data);
-          setSelectedUser(data[0]);
+          const savedUser = localStorage.getItem('PULSE_TRADE_SELECTED_USER');
+          if (savedUser && data.includes(savedUser)) {
+            setSelectedUser(savedUser);
+          } else {
+            setSelectedUser(data[0]);
+          }
         }
       })
       .catch((err) => console.error("Failed to load users", err));
@@ -306,7 +311,11 @@ function Dashboard() {
       <header className="header">
         <div className="header-left">
           <h1>Day Trading Dashboard</h1>
-          <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)}>
+          <select value={selectedUser} onChange={(e) => {
+            const newUser = e.target.value;
+            setSelectedUser(newUser);
+            localStorage.setItem('PULSE_TRADE_SELECTED_USER', newUser);
+          }}>
             {userIds.map((uid) => (
               <option key={uid} value={uid}>{uid}</option>
             ))}
