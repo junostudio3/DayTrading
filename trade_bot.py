@@ -481,11 +481,23 @@ class TradeSingleBot:
             return
 
         budget = self.auth.account.balance.dnca_tot_amt
+
         # 수수료를 감안하여 budget에 여유를 둔다. (약 만원 정도 여유를 둔다고 가정)
         # 어차피 비싼 종목은 사지 않게 되어 있으므로 큰 문제가 되지는 않을 것이다.
         budget = max(0, budget - 10000)
-        # 최대 100만원까지 투자하도록 제한한다.
-        budget = min(budget, 1000000) 
+
+        # 최대 200만원까지 투자하도록 제한한다.
+        budget = min(budget, 2000000)
+
+        # 총평가금액 기준으로 한종목에 50% 이상 투자하지 않도록 제한한다.
+        balance = self.auth.account.balance
+        tot_evlu_amt = int(balance.tot_evlu_amt)
+        if tot_evlu_amt < 1000000:
+            # 총평가금액이 100만원 미만인 경우에는 최대 투자 금액을 총평가금액의 50%로 제한한다.
+            budget = min(budget, tot_evlu_amt // 2)
+        else:
+            # 총평가금액이 100만원 이상인 경우에는 최대 투자 금액을 총평가금액의 33%로 제한한다.
+            budget = min(budget, tot_evlu_amt // 3)
 
         current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
         quantity = int(budget // current_price)
