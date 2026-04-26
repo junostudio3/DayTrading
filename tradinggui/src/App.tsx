@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { fetchCandles, fetchAccountHistory, fetchUsers, fetchSnapshot, submitOrderRequest } from './api';
+import { fetchCandles, fetchAccountHistory, fetchProfitHistory, fetchUsers, fetchSnapshot, submitOrderRequest } from './api';
 import './App.css';
 
 interface Account {
@@ -145,6 +145,40 @@ function AccountHistoryChartComponent({ userId }: { userId: string }) {
   );
 }
 
+function ProfitHistoryChartComponent({ userId }: { userId: string }) {
+  const [data, setData] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchProfitHistory(userId)
+      .then((history: any) => {
+        if (history && history.length > 0) {
+          const chartData = history.map((item: any) => ({
+            time: item.time,
+            profit: item.profit,
+          }));
+          setData(chartData);
+        }
+      })
+      .catch((err) => console.error(err));
+  }, [userId]);
+
+  return (
+    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+          <XAxis dataKey="time" stroke="#D9D9D9" />
+          <YAxis stroke="#D9D9D9" domain={['auto', 'auto']} />
+          <Tooltip contentStyle={{ backgroundColor: '#1E1E1E', borderColor: '#444' }} />
+          <Legend />
+          <Line type="monotone" dataKey="profit" name="수익 변화금" stroke="#ffb74d" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function Dashboard() {
     
   const [userIds, setUserIds] = useState<string[]>([]);
@@ -153,7 +187,7 @@ function Dashboard() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
   const [marketTab, setMarketTab] = useState<'holdings' | 'watch'>('holdings');
-  const [tab, setTab] = useState<'trade_logs' | 'logs' | 'history'>('trade_logs');
+  const [tab, setTab] = useState<'trade_logs' | 'logs' | 'history' | 'profit_history'>('trade_logs');
   const [orderModal, setOrderModal] = useState<{ show: boolean; side: 'buy' | 'sell'; pdno: string | null }>({ show: false, side: 'buy', pdno: null });
   const [orderQty, setOrderQty] = useState<string>('');
   const tradeLogRef = useRef<HTMLDivElement>(null);
@@ -358,13 +392,16 @@ function Dashboard() {
 
       <div className="logs-panel">
         <div className="tabs">
-          <button className={tab === 'trade_logs' ? 'active' : ''} onClick={() => setTab('trade_logs')}>거래 로그</button>
-          <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>일반 로그</button>
-          <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>자금 흐름</button>
+          <button className={tab === 'trade_logs' ? 'active' : ''} onClick={() => setTab('trade_logs')}>거래로그</button>
+          <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>일반로그</button>
+          <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>자금</button>
+          <button className={tab === 'profit_history' ? 'active' : ''} onClick={() => setTab('profit_history')}>수익</button>
         </div>
-        <div className={`log-content-wrapper ${tab !== 'history' ? 'log-content-padded' : ''}`} ref={tab === 'trade_logs' ? tradeLogRef : logsRef}>
+        <div className={`log-content-wrapper ${(tab !== 'history' && tab !== 'profit_history') ? 'log-content-padded' : ''}`} ref={tab === 'trade_logs' ? tradeLogRef : logsRef}>
           {tab === 'history' ? (
             <AccountHistoryChartComponent userId={selectedUser} />
+          ) : tab === 'profit_history' ? (
+            <ProfitHistoryChartComponent userId={selectedUser} />
           ) : (
             (tab === 'trade_logs' ? snapshot?.trade_logs : snapshot?.logs)?.map((log, i) => (
               <div key={i} className="log-line">{log}</div>

@@ -9,15 +9,15 @@ export default defineConfig({
       registerType: 'autoUpdate',
       devOptions: { enabled: true },
       manifest: {
-        name: 'PulseTrade HD Dashboard',
-        short_name: 'PulseTrade',
+        name: '투자봇J',
+        short_name: '투자봇J',
         description: 'Day Trading GUI PWA App',
         theme_color: '#1e1e1e',
         background_color: '#1e1e1e',
         display: 'standalone',
         icons: [
-          { src: 'favicon.svg', sizes: '192x192', type: 'image/svg+xml' },
-          { src: 'favicon.svg', sizes: '512x512', type: 'image/svg+xml' }
+          { src: 'tradinggui.png', sizes: '192x192', type: 'image/png' },
+          { src: 'tradinggui.png', sizes: '512x512', type: 'image/png' }
         ]
       }
     })

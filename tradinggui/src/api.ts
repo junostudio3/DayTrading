@@ -21,6 +21,11 @@ export const fetchAccountHistory = async (userId: string) => {
   return res.json();
 };
 
+export const fetchProfitHistory = async (userId: string) => {
+  const res = await fetchWithAuth(`${API_BASE_URL}/profit_history?app_id=${userId}`);
+  return res.json();
+};
+
 export const fetchUsers = async () => {
   const res = await fetchWithAuth(`${API_BASE_URL}/users`);
   return res.json();

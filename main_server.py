@@ -186,6 +186,51 @@ async def get_account_history(app_id: str = Query(..., description="User app ID"
         logger.error(f"Failed to fetch account history: {e}")
         raise HTTPException(status_code=500, detail="Database connection failed")
 
+@app.get("/profit_history")
+async def get_profit_history(app_id: str = Query(..., description="User app ID")):
+    import pymysql
+    try:
+        connection = pymysql.connect(
+            host=mysql_host,
+            port=mysql_port,
+            user=mysql_user,
+            password=mysql_password,
+            database=mysql_database,
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        try:
+            with connection.cursor() as cursor:
+                sql = """
+                    SELECT 
+                        a.id, 
+                        a.app_id, 
+                        a.tot_evlu_amt,
+                        COALESCE((
+                            SELECT d.deposit 
+                            FROM `pulsetrade.deposit` d 
+                            WHERE d.app_id = a.app_id AND d.time <= a.time 
+                            ORDER BY d.time DESC LIMIT 1
+                        ), 0) as deposit,
+                        a.tot_evlu_amt - COALESCE((
+                            SELECT d.deposit 
+                            FROM `pulsetrade.deposit` d 
+                            WHERE d.app_id = a.app_id AND d.time <= a.time 
+                            ORDER BY d.time DESC LIMIT 1
+                        ), 0) as profit,
+                        DATE_FORMAT(a.time, '%%Y-%%m-%%d %%H:%%i:%%s') as time
+                    FROM `pulsetrade.accounthistory` a
+                    WHERE a.app_id = %s
+                    AND a.time >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                    ORDER BY a.time ASC
+                """
+                cursor.execute(sql, (app_id,))
+                result = cursor.fetchall()
+                return result
+        finally:
+            connection.close()
+    except Exception as e:
+        logger.error(f"Failed to fetch profit history: {e}")
+        raise HTTPException(status_code=500, detail="Database connection failed")
 
 if __name__ == "__main__":
     access_log = False # uvicorn의 기본 access log는 너무 많은 로그를 생성하므로 비활성화
