@@ -158,6 +158,13 @@ class TradeBot:
             # 한번은 업데이트를 시도하고 is_running을 False로 설정한다
             self.is_running = False
 
+        if not hasattr(self, '_last_interest_tick_time'):
+            self._last_interest_tick_time = now
+
+        if now - self._last_interest_tick_time >= 600:
+            self.interest_stock_manager.tick(600)
+            self._last_interest_tick_time = now
+
         self._update_market_data(now)
         self._update_interest_stock_manager(now)
 
@@ -981,14 +988,10 @@ if __name__ == "__main__":
     bot = TradeBot()
     bot.display_account_info()
     user_app_ids = bot.get_user_app_ids()
-    last_tick_time = time.time()
 
     while True:
         now = time.time()
         bot.update_market_and_stock_data(now)
-        if now - last_tick_time >= 600:
-            bot.interest_stock_manager.tick(600)
-            last_tick_time = now
 
         for app_id in user_app_ids:
             bot.process_once(app_id)

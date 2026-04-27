@@ -91,7 +91,6 @@ class TradeEngine:
             return
 
         user_index = 0
-        last_tick_time = time.time()
 
         while not self._stop_event.is_set():
             app_id = user_app_id_list[user_index]
@@ -100,9 +99,6 @@ class TradeEngine:
                 self._process_orders()
                 if user_index == 0:
                     now = time.time()
-                    if now - last_tick_time >= 600:
-                        self.bot.interest_stock_manager.tick(600)
-                        last_tick_time = now
                     self.bot.update_market_and_stock_data(now)
 
                 self.bot.process_once(app_id)
