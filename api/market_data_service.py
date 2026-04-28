@@ -138,6 +138,30 @@ class MarketDataService:
         else:
             raise Exception(f"Failed to get current price and accumulated volume: {response.status_code} {response.text}")
 
+    def get_market_index(self, is_kosdaq: bool = True):
+        """시장 지수(KOSPI, KOSDAQ) 현재가 및 등락률(%) 조회
+        반환값: (현재지수, 전일대비율(%))
+        해당 API는 모의투자를 지원하지 않으므로 실투자에서만 사용해야 한다.
+        """
+        params = {
+            "fid_cond_mrkt_div_code": "U",
+            "fid_input_iscd": "1001" if is_kosdaq else "0001"
+        }
+
+        response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-index-price",
+                                     "FHPUP02100000", # 국내 주식 업종 현재가 조회
+                                     params=params)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("rt_cd") == "0" and "output" in data:
+                index_val = float(data["output"]["bstp_nmix_prpr"])
+                rate_val = float(data["output"]["bstp_nmix_prdy_ctrt"]) # 전일 대비율 (%)
+                return index_val, rate_val
+            raise Exception(f"Failed to get market index: {data.get('msg_cd')} {data.get('msg1')}")
+        else:
+            raise Exception(f"Failed to get market index: {response.status_code} {response.text}")
+
     def get_current_overseas(self, pdno: str, exchange: str):
         """현재가 조회 """
 

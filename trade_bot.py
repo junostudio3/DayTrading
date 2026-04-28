@@ -53,6 +53,10 @@ class TradeBot:
 
         self.snapshot_collect_candidates: list[SymbolItem] = []
         self._snapshot_toggle = False
+        
+        # 시장 지수 정보
+        self.market_index_kosdaq: float = 0.0
+        self.market_index_kosdaq_drop_rate: float = 0.0
 
         self.user_manager: KisUserManager = get_kis_user_manager(self.log)
         if len(self.user_manager.users) == 0:
@@ -322,6 +326,27 @@ class TradeBot:
         if current_time.tm_hour < 9 or (current_time.tm_hour == 15 and current_time.tm_min > 30) or current_time.tm_hour > 15:
             return
 
+        # KOSDAQ 시장 지수 업데이트 (10초에 한 번 정도 갱신하도록 처리)
+        if getattr(self, '_last_market_index_tick_time', 0.0) + 10 <= now:
+            self._last_market_index_tick_time = now
+            try:
+                if getattr(self._market_data_service.auth, 'is_virtual', False):
+                    # 모의투자 환경에서는 시장 지수 조회 API를 미지원하므로 필터 기능 생략
+                    self.market_index_kosdaq = 0.0
+                    self.market_index_kosdaq_drop_rate = 0.0
+                else:
+                    kosdaq_val, kosdaq_rate = self._market_data_service.get_market_index(is_kosdaq=True)
+                    self.market_index_kosdaq = kosdaq_val
+                    self.market_index_kosdaq_drop_rate = kosdaq_rate
+                    
+                    # 시장 폭락 경고 로깅 (10분에 한 번만 남기도록)
+                    if TradingParams.USE_MARKET_INDEX_FILTER and kosdaq_rate <= TradingParams.MARKET_INDEX_DROP_LIMIT:
+                        if getattr(self, '_last_market_drop_log_time', 0.0) + 600 <= now:
+                            self.log(f"🚨 시장 지수 경고: 코스닥 지수 하락률({kosdaq_rate}%)이 제한치({TradingParams.MARKET_INDEX_DROP_LIMIT}%)에 도달하여 신규 매수가 차단됩니다.")
+                            self._last_market_drop_log_time = now
+            except Exception as e:
+                self.log(f"시장 지수 업데이트 중 오류: {e}")
+
         monitor_dict: dict[str, SymbolItem] = {}
         for bot in self.bots.values():
             for item in bot.monitor_list:
@@ -476,6 +501,10 @@ class TradeSingleBot:
         if self.parent.price_analysis.is_purchase_overtime(pdno):
             self._symbol_log(symbol_item, "현재 시간은 매수 추천이 종료된 시간입니다. 매수 주문 단계에서 판단 단계로 이동합니다.")
             state.step = TradeStep.JUDGE_STEP
+            return
+
+        if TradingParams.USE_MARKET_INDEX_FILTER and self.parent.market_index_kosdaq_drop_rate <= TradingParams.MARKET_INDEX_DROP_LIMIT:
+            # 시장 지수가 과도하게 하락한 장세일 경우 매수 진입을 완전히 차단한다.
             return
 
         if time.time() < state.cooldown_until:

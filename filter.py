@@ -10,7 +10,7 @@ class TradingParams:
     RSI_LOWER_LIMIT = 30            # 과매도 진입 차단 RSI 하한 [2026-04-01 추가]
     EMA20_DEVIATION_MAX = 0.02      # 20EMA 대비 현재가 이격도 상한 (추격매수 방지)
     EMA_GAP_MIN = 0.006             # 20EMA-60EMA 이격도 최소 비율 (추세 확인)
-    TREND_VOLUME_RATIO = 1.3        # 추세 매수 거래량 배수 (10봉 평균 대비)
+    TREND_VOLUME_RATIO = 1.5        # 추세 매수 거래량 배수 (10봉 평균 대비) [2026-04-29 1.3→1.5 상향 변경: 휩쏘 방지]
     BREAKOUT_VOLUME_RATIO = 1.5     # 돌파 매수 거래량 배수 (10봉 평균 대비)
     TREND_BULLISH_MIN = 2           # 추세 매수 시 최근 3봉 중 양봉 최소 개수
     MIN_CANDLE_COUNT = 60           # 분석에 필요한 최소 5분봉 개수
@@ -23,7 +23,7 @@ class TradingParams:
     # ── 손절 필터 ──
     STOP_LOSS_MIN = 0.015           # 최소 손절 비율
     STOP_LOSS_MAX = 0.05            # 최대 손절 비율
-    ATR_MULTIPLIER = 2.5            # ATR 기반 손절 배수
+    ATR_MULTIPLIER = 2.0            # ATR 기반 손절 배수 [2026-04-29 2.5→2.0 보수적 적용: 손절폭 축소]
 
     # ── 마감 시간 ──
     FORCE_SELL_HOUR = 15            # 이 시(hour) 이후 무조건 매도
@@ -34,7 +34,7 @@ class TradingParams:
     BUY_ORDER_TIMEOUT_SECONDS = 120     # 매수 주문 체결 대기 시간(초)
     SELL_ORDER_TIMEOUT_SECONDS = 90     # 매도 주문 체결 대기 시간(초)
     COOLDOWN_AFTER_CANCEL = 1800        # 주문 취소 후 재진입 금지 시간(초) [2026-04-01 600→1800 변경: 쿨타임 일원화]
-    COOLDOWN_AFTER_SELL = 1800          # 매도 체결 후 재진입 금지 시간(초)
+    COOLDOWN_AFTER_SELL = 3600          # 매도 체결 후 재진입 금지 시간(초) [2026-04-29 1800→3600 일괄 변경: 뇌동매매 방지]
 
     # ── 종목 선정 필터 ──
     MAX_STOCK_PRICE = 25000         # 관심종목 가격 상한
@@ -43,11 +43,17 @@ class TradingParams:
     STOCK_EXPIRY_DAYS = 3           # 관심종목 만료 기간(일) - 이 기간 이후 자동 교체 대상
     MIN_INTEREST_VOLUME = 100000    # 관심종목 진입 최소 거래량 (빈자리 품질 게이트)
 
+    # ── 시장 분위기 필터 ──
+    USE_MARKET_INDEX_FILTER = True  # 시장 지수 연동 진입 필터 사용 여부 [2026-04-29 추가]
+    MARKET_INDEX_DROP_LIMIT = -1.5  # KOSDAQ 지수가 전일 대비 이 수치(%) 이하로 하락 중이면 신규 진입 차단 [2026-04-29 추가]
+
     @classmethod
     def to_report_header(cls) -> str:
         """리포트 파일 상단에 기록할 파라미터 요약 문자열"""
         lines = [
             "=== Trading Parameters ===",
+            f"USE_MARKET_INDEX_FILTER={cls.USE_MARKET_INDEX_FILTER}",
+            f"MARKET_INDEX_DROP_LIMIT={cls.MARKET_INDEX_DROP_LIMIT}%",
             f"RSI_UPPER_LIMIT={cls.RSI_UPPER_LIMIT}",
             f"EMA20_DEVIATION_MAX={cls.EMA20_DEVIATION_MAX}",
             f"EMA_GAP_MIN={cls.EMA_GAP_MIN}",

@@ -63,6 +63,16 @@ class TradeReporter:
             if symbol_item.pdno in self.bot_parent.price_analysis.items:
                 p_item = self.bot_parent.price_analysis.items[symbol_item.pdno]
                 indicators = p_item.get_current_indicators()
+                
+                # 시장 장세 정보 추가
+                market_idx = getattr(self.bot_parent, 'market_index_kosdaq', None)
+                market_drop = getattr(self.bot_parent, 'market_index_kosdaq_drop_rate', None)
+                if market_idx is not None and market_drop is not None:
+                    if indicators is None:
+                        indicators = {}
+                    indicators["M_Idx"] = round(market_idx, 2)
+                    indicators["M_Drop"] = round(market_drop, 2)
+                    
                 if indicators:
                     ind_strs = []
                     for k, v in indicators.items():
