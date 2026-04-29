@@ -56,6 +56,8 @@ class TradeReporter:
         log_text = trade_type.get_kr_text()
         quantity_text = f"이미 체결된 수량: {quantity}" if trade_type in [TradeType.BUY_CANCELLED, TradeType.SELL_CANCELLED] else f"수량: {quantity}"
         log_text = f"{log_text} / {quantity_text} / 가격: {price}"
+
+        simple_log_text = log_text + (f" / 사유: {text}" if text else "")
         
         # 특정 거래 유형에서 기술적 지표를 리포트에 추가
         if trade_type in [TradeType.BUY, TradeType.SELL, TradeType.IMMEDIATE_SELL]:
@@ -83,10 +85,12 @@ class TradeReporter:
 
         if text:
             log_text += f" / 사유: {text}"
-        self._add_log(symbol_item, log_text)
+        self._add_log(symbol_item, log_text, simple_log_text)
 
-    def _add_log(self, symbol_item: SymbolItem, text: str):
+    def _add_log(self, symbol_item: SymbolItem, text: str, simple_text: str):
         text = f"[{symbol_item.pdno} {symbol_item.prdt_name}] {text}"
+        simple_text = f"[{symbol_item.prdt_name}] {simple_text}"
+
         trade_log = getattr(self.bot, "trade_log", None)
         if callable(trade_log):
             trade_log(text)
@@ -109,7 +113,7 @@ class TradeReporter:
                     
             # 텔레그램 알림 전송 (정상 기록된 경우)
             balance_str = self.account_balance.tot_evlu_amt if self.account_balance else "N/A"
-            Telegram.send_message(f"🔔 <b>[거래 발생] {self.app_id}</b>\n[잔고: {balance_str}]\n{text}")
+            Telegram.send_message(f"🔔 <b>[거래 발생] {self.app_id}</b>\n[잔고: {balance_str}]\n{simple_text}")
                     
         except Exception as e:
             print(f"Failed to write trade log to {log_file_path}: {e}")
