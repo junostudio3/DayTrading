@@ -638,7 +638,7 @@ class TradeSingleBot:
             state.step = TradeStep.WAIT_ACCEPT_SELL
             return
 
-        if not self.parent.price_analysis.is_sell_recommended(pdno, purchase_price):
+        if not self.parent.price_analysis.is_sell_recommended(pdno, purchase_price, state.buy_order_requested_at):
             return
 
         if pdno not in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:

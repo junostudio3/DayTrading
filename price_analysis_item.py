@@ -399,7 +399,7 @@ class PriceAnalysisItem:
 
         return False
     
-    def is_sell_recommended(self, purchase_price):
+    def is_sell_recommended(self, purchase_price, buy_time=0.0):
         # 판매 추천 로직
         # 익절 로직
         if len(self.candle_stick_5minute) < 3:
@@ -412,13 +412,27 @@ class PriceAnalysisItem:
         current_price = last.close_price
         profit_rate = (current_price - purchase_price) / purchase_price
 
-        # 최소 수익률 이상이 아니면 판매 안함
-        if profit_rate < TradingParams.TAKE_PROFIT_MIN:
-            return False
-
         if profit_rate >= TradingParams.TAKE_PROFIT_FORCE:
             # 강제 익절 수익률 이상이면 바로 판매 추천
             return True
+
+        # [2026-04-29 추가] 트레일링 스탑 (수익 보존)
+        max_high = 0.0
+        # buy_time이 있으면 그 이후의 캔들만, 없으면 최근 12개(1시간) 캔들 검사
+        valid_candles = [c for c in candles if c.start_time >= buy_time] if buy_time > 0.0 else candles[-12:]
+        if valid_candles:
+            max_high = max(c.high_price for c in valid_candles)
+            max_profit_rate = (max_high - purchase_price) / purchase_price
+            
+            # 최고가 기준 수익률이 트리거를 넘었고, 현재가가 최고가 대비 드랍 폭 이상 빠졌다면 익절
+            if max_profit_rate >= TradingParams.TRAILING_STOP_TRIGGER:
+                drop_rate = (max_high - current_price) / max_high
+                if drop_rate >= TradingParams.TRAILING_STOP_DROP:
+                    return True
+
+        # 최소 수익률 이상이 아 니면 기본 익절 판별 안함
+        if profit_rate < TradingParams.TAKE_PROFIT_MIN:
+            return False
 
         closes = [c.close_price for c in candles]
         ema20 = self._ema(closes, 20)

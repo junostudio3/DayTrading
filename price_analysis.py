@@ -55,9 +55,9 @@ class PriceAnalysis:
             return self.items[pdno].is_purchase_recommended()
         return False
     
-    def is_sell_recommended(self, pdno, purchase_price):
+    def is_sell_recommended(self, pdno, purchase_price, buy_time=0.0):
         if pdno in self.items:
-            return self.items[pdno].is_sell_recommended(purchase_price)
+            return self.items[pdno].is_sell_recommended(purchase_price, buy_time)
         return False
 
     def is_sell_stop_loss_recommended(self, pdno, purchase_price):

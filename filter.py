@@ -18,12 +18,14 @@ class TradingParams:
     # ── 매도 필터 ──
     TAKE_PROFIT_MIN = 0.015         # 익절 시작 수익률 (이하이면 홀딩)
     TAKE_PROFIT_FORCE = 0.03        # 즉시 익절 수익률
+    TRAILING_STOP_TRIGGER = 0.01    # 이 수익률을 터치한 후에는 수익 보존을 위해 고점 대비 하락 시 매도 [2026-04-29 추가]
+    TRAILING_STOP_DROP = 0.005      # 고점 대비 이만큼(%) 하락하면 익절 처리 [2026-04-29 추가]
     MIN_SELL_VOLUME_RATIO = 0.2     # 매도 시 최소 거래량 비율 - 유동성 부족 매도 차단 [2026-04-01 추가]
 
     # ── 손절 필터 ──
     STOP_LOSS_MIN = 0.015           # 최소 손절 비율
     STOP_LOSS_MAX = 0.05            # 최대 손절 비율
-    ATR_MULTIPLIER = 2.0            # ATR 기반 손절 배수 [2026-04-29 2.5→2.0 보수적 적용: 손절폭 축소]
+    ATR_MULTIPLIER = 2.4            # ATR 기반 손절 배수 [2026-04-29 2.0→2.4 복원: 휩쏘 방지]
 
     # ── 마감 시간 ──
     FORCE_SELL_HOUR = 15            # 이 시(hour) 이후 무조건 매도
