@@ -133,8 +133,8 @@ class PriceAnalysisItem:
         self.candle_stick_5minute.append(merged_candle)
         self._insert_candle(merged_candle)
 
-        # 메모리 관리
-        if len(self.candle_stick_5minute) > 200:
+        # 메모리 관리 (하루=5분봉x6.5시간(주장시간)=78, 일주일=하루x7=546)
+        if len(self.candle_stick_5minute) > 546:
             oldest = self.candle_stick_5minute.pop(0)
             self._delete_candle(oldest.start_time)
         return True

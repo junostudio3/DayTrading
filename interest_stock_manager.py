@@ -1,7 +1,6 @@
 import json
 import os
 import time
-from datetime import date, timedelta
 from filter import SymbolFilter, TradingParams
 from typing import List
 from common_structure import SymbolItem
