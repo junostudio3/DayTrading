@@ -624,32 +624,37 @@ class TradeSingleBot:
         purchase_price = float(inventory['pchs_avg_pric'])
         quantity = int(inventory['hldg_qty'])
 
-        if self.parent.price_analysis.is_sell_stop_loss_recommended(pdno, purchase_price):
+        is_stop_loss, stop_reason = self.parent.price_analysis.is_sell_stop_loss_recommended(pdno, purchase_price)
+        if is_stop_loss:
             current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price) if pdno in self.parent.price_analysis.items and self.parent.price_analysis.items[pdno].candle_stick_5minute else 0
             order = self.immediately_sell(symbol_item, quantity)
             if order is None:
-                self._symbol_log(symbol_item, f"손절 추천이지만 즉시 매도 주문에 실패했습니다. 다음 루프에서 다시 시도합니다.")
+                self._symbol_log(symbol_item, f"손절 추천[{stop_reason}]이지만 즉시 매도 주문에 실패했습니다. 다음 루프에서 다시 시도합니다.")
                 return
 
             state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
             state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
-            self._symbol_log(symbol_item, f"손절 추천: 구매가: {purchase_price} / 현재가: {current_price}")
-            self.trade_reporter.add(TradeType.IMMEDIATE_SELL, symbol_item, quantity, current_price)  # 즉시 매도 주문 로그 추가
+            self._symbol_log(symbol_item, f"손절 추천 [{stop_reason}]: 구매가: {purchase_price} / 현재가: {current_price}")
+            self.trade_reporter.add(TradeType.IMMEDIATE_SELL, symbol_item, quantity, current_price, text=stop_reason)  # 즉시 매도 주문 로그 추가
             state.step = TradeStep.WAIT_ACCEPT_SELL
             return
 
-        if not self.parent.price_analysis.is_sell_recommended(pdno, purchase_price, state.buy_order_requested_at):
+        is_recommend, reason = self.parent.price_analysis.is_sell_recommended(pdno, purchase_price, state.buy_order_requested_at)
+        if not is_recommend:
             return
 
         if pdno not in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
             return
 
         current_price = int(self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price)
+        
+        self._symbol_log(symbol_item, f"일반 익절/매도 추천 [{reason}]: 구매가: {purchase_price} / 현재가: {current_price}")
+        
         order = self.sell(symbol_item, quantity, current_price)
         if order is None:
             return
 
-        self.trade_reporter.add(TradeType.SELL, symbol_item, quantity, current_price)
+        self.trade_reporter.add(TradeType.SELL, symbol_item, quantity, current_price, text=reason)
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
         state.step = TradeStep.WAIT_ACCEPT_SELL

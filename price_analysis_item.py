@@ -399,11 +399,11 @@ class PriceAnalysisItem:
 
         return False
     
-    def is_sell_recommended(self, purchase_price, buy_time=0.0):
+    def is_sell_recommended(self, purchase_price, buy_time=0.0) -> tuple[bool, str]:
         # 판매 추천 로직
         # 익절 로직
         if len(self.candle_stick_5minute) < 3:
-            return False
+            return False, ""
 
         candles = self.candle_stick_5minute
         last = candles[-1]
@@ -412,13 +412,13 @@ class PriceAnalysisItem:
         current_price = last.close_price
         if purchase_price <= 0:
             # 구매 가격이 유효하지 않으면 판매 추천하지 않음
-            return False
+            return False, ""
 
         profit_rate = (current_price - purchase_price) / purchase_price
 
         if profit_rate >= TradingParams.TAKE_PROFIT_FORCE:
             # 강제 익절 수익률 이상이면 바로 판매 추천
-            return True
+            return True, f"강제익절 (수익률 {profit_rate * 100:.2f}%)"
 
         # [2026-04-29 추가] 트레일링 스탑 (수익 보존)
         max_high = 0.0
@@ -428,15 +428,18 @@ class PriceAnalysisItem:
             max_high = max(c.high_price for c in valid_candles)
             max_profit_rate = (max_high - purchase_price) / purchase_price
             
-            # 최고가 기준 수익률이 트리거를 넘었고, 현재가가 최고가 대비 드랍 폭 이상 빠졌다면 익절
+            # 최고가 기준 수익률이 트리거를 넘었고, 현재가가 최고가 대비 드랍 폭 이상 빠졌다면 익절 검토
             if max_profit_rate >= TradingParams.TRAILING_STOP_TRIGGER:
                 drop_rate = (max_high - current_price) / max_high
                 if drop_rate >= TradingParams.TRAILING_STOP_DROP:
-                    return True
+                    # [2026-04-30 수정] 단, 이미 하락하여 최소 보존 수익률(원금 등) 밑으로 떨어졌다면 
+                    # 트레일링 스탑 기회는 지나간 것으로 보고 스탑로스에 맡김 (Whipsaw 방지)
+                    if profit_rate >= TradingParams.TRAILING_STOP_MIN_PROFIT:
+                        return True, f"트레일링스탑 (고점방어: {max_profit_rate*100:.2f}% -> 현재 {profit_rate*100:.2f}%)"
 
         # 최소 수익률 이상이 아 니면 기본 익절 판별 안함
         if profit_rate < TradingParams.TAKE_PROFIT_MIN:
-            return False
+            return False, ""
 
         closes = [c.close_price for c in candles]
         ema20 = self._ema(closes, 20)
@@ -446,7 +449,7 @@ class PriceAnalysisItem:
             avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
             vol_ratio = last.volume / avg_vol if avg_vol > 0 else 0
             if vol_ratio < TradingParams.MIN_SELL_VOLUME_RATIO:
-                return False  # 유동성 부족 시 익절 연기
+                return False, ""  # 유동성 부족 시 익절 연기
 
         # ----------------------------
         # 🔼 상승 유지 조건
@@ -463,21 +466,21 @@ class PriceAnalysisItem:
 
         # 상승 유지면 안 판다
         if ema_condition and bullish_condition and high_condition:
-            return False
+            return False, ""
 
         # 상승 꺾이면 매도
-        return True
+        return True, f"추세이탈 익절 (수익률 {profit_rate * 100:.2f}%)"
     
-    def is_sell_stop_loss_recommended(self, purchase_price):
+    def is_sell_stop_loss_recommended(self, purchase_price) -> tuple[bool, str]:
         # 손절 추천 로직
         local_time = time.localtime()
 
         # 장마감시간 이후에는 어찌 되었든 판매 추천
         if local_time.tm_hour >= TradingParams.FORCE_SELL_HOUR:
-            return True
+            return True, "장마감강제청산"
         
         if not self.candle_stick_5minute:
-            return False
+            return False, ""
         
         # [2026-04-01 추가] 거래량 필터 - 저유동성에서 손절 차단 (미끄러짐 방지)
         candles = self.candle_stick_5minute
@@ -485,7 +488,7 @@ class PriceAnalysisItem:
             avg_vol = sum(c.volume for c in candles[-11:-1]) / 10
             vol_ratio = candles[-1].volume / avg_vol if avg_vol > 0 else 0
             if vol_ratio < TradingParams.MIN_SELL_VOLUME_RATIO:
-                return False  # 유동성 부족 시 손절 연기
+                return False, ""  # 유동성 부족 시 손절 연기
 
         # ATR 기반 동적 손절 폭
         current_price = self.candle_stick_5minute[-1].close_price
@@ -496,4 +499,9 @@ class PriceAnalysisItem:
             atr_ratio = (atr * TradingParams.ATR_MULTIPLIER) / current_price 
             stop_loss_ratio = max(TradingParams.STOP_LOSS_MIN, min(TradingParams.STOP_LOSS_MAX, atr_ratio))
             
-        return current_price <= purchase_price * (1.0 - stop_loss_ratio)
+        if current_price <= purchase_price * (1.0 - stop_loss_ratio):
+            # 손절 달성
+            loss_rate = (current_price - purchase_price) / purchase_price
+            return True, f"손절컷(목표: -{stop_loss_ratio*100:.2f}%, 현재: {loss_rate*100:.2f}%)"
+            
+        return False, ""
