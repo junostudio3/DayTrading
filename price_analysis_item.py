@@ -140,9 +140,17 @@ class PriceAnalysisItem:
         return True
     
     def is_purchase_overtime(self):
-        # FORCE_SELL_HOUR 부터는 매도를 시작하므로 그 이전 시각부터 구매 추천하지 않음
+        # 시간 제한: 장 시작 직후 혼조세(9시 15분 이전)이거나, 장 마감 직전(14시 20분 이후)일 때 매수 금지
         local_time = time.localtime()
-        return (local_time.tm_hour == TradingParams.PURCHASE_OVERTIME_HOUR and local_time.tm_min >= TradingParams.PURCHASE_OVERTIME_MIN) or (local_time.tm_hour >= TradingParams.FORCE_SELL_HOUR)
+        hour = local_time.tm_hour
+        minute = local_time.tm_min
+
+        # 매수 시작 시각 이전이면 구매 추천 안함 (9시 15분부터 매수 가능)
+        if hour < TradingParams.PURCHASE_START_HOUR or (hour == TradingParams.PURCHASE_START_HOUR and minute < TradingParams.PURCHASE_START_MIN):
+            return True
+
+        # FORCE_SELL_HOUR 부터는 매도를 시작하므로 그 이전 시각부터 구매 추천하지 않음
+        return (hour == TradingParams.PURCHASE_OVERTIME_HOUR and minute >= TradingParams.PURCHASE_OVERTIME_MIN) or (hour >= TradingParams.FORCE_SELL_HOUR)
         
     def is_purchase_recommended(self):
         if self.is_purchase_overtime():

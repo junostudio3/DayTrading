@@ -30,6 +30,8 @@ class TradingParams:
 
     # ── 마감 시간 ──
     FORCE_SELL_HOUR = 15            # 이 시(hour) 이후 무조건 매도
+    PURCHASE_START_HOUR = 9         # 매수 시작 시(hour) [2026-04-30 신설]
+    PURCHASE_START_MIN = 15         # 매수 시작 분(min) (오픈 직후 휩쏘 방어) [2026-04-30 신설]
     PURCHASE_OVERTIME_HOUR = 14     # 매수 중단 시(hour)
     PURCHASE_OVERTIME_MIN = 20      # 매수 중단 분(min) [2026-04-13 50->20 변경]
 
@@ -72,6 +74,8 @@ class TradingParams:
             f"STOP_LOSS_MIN={cls.STOP_LOSS_MIN}",
             f"STOP_LOSS_MAX={cls.STOP_LOSS_MAX}",
             f"ATR_MULTIPLIER={cls.ATR_MULTIPLIER}",
+            f"PURCHASE_START_TIME={cls.PURCHASE_START_HOUR:02d}:{cls.PURCHASE_START_MIN:02d}",
+            f"PURCHASE_OVERTIME={cls.PURCHASE_OVERTIME_HOUR:02d}:{cls.PURCHASE_OVERTIME_MIN:02d}",
             f"FORCE_SELL_HOUR={cls.FORCE_SELL_HOUR}",
             f"BUY_ORDER_TIMEOUT={cls.BUY_ORDER_TIMEOUT_SECONDS}s",
             f"SELL_ORDER_TIMEOUT={cls.SELL_ORDER_TIMEOUT_SECONDS}s",
