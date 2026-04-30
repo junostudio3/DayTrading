@@ -89,6 +89,10 @@ class KisAuthAccount:
                 # output은 리스트 형태이다.
                 if isinstance(output, list):
                     self.stocks = output  # 잔고 정보 저장
+
+                    # stocks중 'hldg_qty'가 0인 항목은 제외한다.
+                    self.stocks = [stock for stock in self.stocks if int(stock.get("hldg_qty", 0)) > 0]
+
                     self._rebuild_stocks_by_pdno()
                 else:
                     self.stocks = []  # 잔고 정보가 없으면 빈 리스트로 초기화

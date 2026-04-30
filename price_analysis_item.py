@@ -410,6 +410,10 @@ class PriceAnalysisItem:
         prev = candles[-2]
 
         current_price = last.close_price
+        if purchase_price <= 0:
+            # 구매 가격이 유효하지 않으면 판매 추천하지 않음
+            return False
+
         profit_rate = (current_price - purchase_price) / purchase_price
 
         if profit_rate >= TradingParams.TAKE_PROFIT_FORCE:
