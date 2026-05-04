@@ -6,7 +6,7 @@ from typing import List
 
 class OrderDivision(enum.Enum):
     SETTLE = "00"  # 지정가
-    MARKET = "10"  # 시장가
+    MARKET = "01"  # 시장가
 
 
 class OrderCheckResult:
