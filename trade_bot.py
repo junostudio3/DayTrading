@@ -650,11 +650,17 @@ class TradeSingleBot:
         
         self._symbol_log(symbol_item, f"일반 익절/매도 추천 [{reason}]: 구매가: {purchase_price} / 현재가: {current_price}")
         
-        order = self.sell(symbol_item, quantity, current_price)
+        if "트레일링스탑" in reason or "강제익절" in reason:
+            order = self.immediately_sell(symbol_item, quantity)
+            trade_type = TradeType.IMMEDIATE_SELL
+        else:
+            order = self.sell(symbol_item, quantity, current_price)
+            trade_type = TradeType.SELL
+            
         if order is None:
             return
 
-        self.trade_reporter.add(TradeType.SELL, symbol_item, quantity, current_price, text=reason)
+        self.trade_reporter.add(trade_type, symbol_item, quantity, current_price, text=reason)
         state.sell_order_no = order.get("ODNO", "") if isinstance(order, dict) else ""
         state.sell_order_requested_at = time.time() if state.sell_order_no else 0.0
         state.step = TradeStep.WAIT_ACCEPT_SELL

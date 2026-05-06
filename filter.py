@@ -18,8 +18,8 @@ class TradingParams:
     # ── 매도 필터 ──
     TAKE_PROFIT_MIN = 0.015         # 익절 시작 수익률 (이하이면 홀딩)
     TAKE_PROFIT_FORCE = 0.03        # 즉시 익절 수익률
-    TRAILING_STOP_TRIGGER = 0.01    # 이 수익률을 터치한 후에는 수익 보존을 위해 고점 대비 하락 시 매도 [2026-04-29 추가]
-    TRAILING_STOP_DROP = 0.005      # 고점 대비 이만큼(%) 하락하면 익절 처리 [2026-04-29 추가]
+    TRAILING_STOP_TRIGGER = 0.015   # 이 수익률을 터치한 후에는 수익 보존을 위해 고점 대비 하락 시 매도 [2026-05-06 수정]
+    TRAILING_STOP_DROP = 0.008      # 고점 대비 이만큼(%) 하락하면 익절 처리 [2026-05-06 수정]
     TRAILING_STOP_MIN_PROFIT = 0.0  # 트레일링 스탑 발동 시 최소 보존 수익률 (원금 밑으로 떨어지면 발동 취소) [2026-04-30 추가]
     MIN_SELL_VOLUME_RATIO = 0.2     # 매도 시 최소 거래량 비율 - 유동성 부족 매도 차단 [2026-04-01 추가]
 
