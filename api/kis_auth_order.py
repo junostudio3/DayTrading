@@ -14,17 +14,24 @@ class OrderCheckResult:
         self.ord_unpr = 0  # 주문 가격
         self.rmn_qty = 0  # 잔량
         self.tot_ccld_qty = 0  # 총 체결 수량
+        self.avg_prvs = 0.0 # 체결 평균 단가
 
     def add(self, other):
-        if self.ord_unpr == 0 and self.rmn_qty == 0 and self.tot_ccld_qty == 0:
+        if self.ord_unpr == 0 and self.rmn_qty == 0 and self.tot_ccld_qty == 0 and self.avg_prvs == 0.0:
             # 초기값이 모두 0인 경우, 다른 객체의 값을 그대로 가져온다.
             self.ord_unpr = other.ord_unpr
             self.rmn_qty = other.rmn_qty
             self.tot_ccld_qty = other.tot_ccld_qty
+            self.avg_prvs = other.avg_prvs
             return
 
         if self.ord_unpr != other.ord_unpr:
-            raise ValueError("주문 가격이 다릅니다.")
+            # 시장가 주문 등일 경우 무시 (예외를 발생시키지 않는다)
+            pass
+
+        total_ccld_qty = self.tot_ccld_qty + other.tot_ccld_qty
+        if total_ccld_qty > 0:
+            self.avg_prvs = ((self.avg_prvs * self.tot_ccld_qty) + (other.avg_prvs * other.tot_ccld_qty)) / total_ccld_qty
 
         self.rmn_qty += other.rmn_qty
         self.tot_ccld_qty += other.tot_ccld_qty
@@ -96,6 +103,7 @@ class KisAuthOrder:
                     result.ord_unpr = int(item.get("ord_unpr", 0))
                     result.rmn_qty = int(item.get("rmn_qty", 0))
                     result.tot_ccld_qty = int(item.get("tot_ccld_qty", 0))
+                    result.avg_prvs = float(item.get("avg_prvs", 0.0))
                     results.append(result)
                 return results
 
