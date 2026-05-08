@@ -588,7 +588,7 @@ class TradeSingleBot:
             self.update_account_stock()
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
-            self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매수 체결 로그 추가
+            self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.avg_prvs)  # 매수 체결 로그 추가
             state.step = TradeStep.DECIDE_ON_SELL
         elif (
             state.buy_order_requested_at > 0
@@ -686,10 +686,10 @@ class TradeSingleBot:
 
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
-            self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.ord_unpr)  # 매도 체결 로그 추가
+            self.trade_reporter.add(TradeType.SELL_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.avg_prvs)  # 매도 체결 로그 추가 (평균체결가 사용)
             
             if purchase_price > 0:
-                is_profit = float(check_order_result.ord_unpr) > purchase_price
+                is_profit = float(check_order_result.avg_prvs) > purchase_price
                 self.parent.interest_stock_manager.apply_trade_result(pdno, is_profit)
 
             # 매도 후 해당 종목의 재진입을 금지하여 잦은 휩쏘로 인한 뇌동매매를 강도높게 방지한다.
