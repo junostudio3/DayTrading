@@ -44,8 +44,8 @@ class PriceAnalysisItem:
         return sqlite3.connect(self.db_path)
 
     def _load_from_db(self):
-        # load all rows sorted by time, skip stale candles older than STOCK_EXPIRY_DAYS
-        cutoff = time.time() - (TradingParams.STOCK_EXPIRY_DAYS * 24 * 60 * 60)
+        # load all rows sorted by time, skip stale candles older than WATCHLIST_ITEM_EXPIRY_DAYS
+        cutoff = time.time() - (TradingParams.WATCHLIST_ITEM_EXPIRY_DAYS * 24 * 60 * 60)
         conn = self._db_connect()
         c = conn.cursor()
 

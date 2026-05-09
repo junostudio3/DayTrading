@@ -9,7 +9,7 @@ from KisKey import data_go_kr_api_key
 from api.info_kosdaq import load_kosdaq_master
 from api.info_kospi import load_kospi_master
 from price_analysis import PriceAnalysis
-from interest_stock_manager import InterestStockManager
+from watchlist import Watchlist
 from dataclasses import dataclass
 from typing import Optional
 from typing import List
@@ -45,7 +45,7 @@ class TradeBot:
         self.trade_log = None
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis/")
-        self.interest_stock_manager = InterestStockManager("./cache/interest_stocks.json")
+        self.watchlist = Watchlist("./cache/watchlist.json")
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
         self.valid_pdno_set: set[str] = set()
@@ -162,15 +162,15 @@ class TradeBot:
             # 한번은 업데이트를 시도하고 is_running을 False로 설정한다
             self.is_running = False
 
-        if not hasattr(self, '_last_interest_tick_time'):
-            self._last_interest_tick_time = now
+        if not hasattr(self, '_last_watchlist_tick_time'):
+            self._last_watchlist_tick_time = now
 
-        if now - self._last_interest_tick_time >= 600:
-            self.interest_stock_manager.tick(600)
-            self._last_interest_tick_time = now
+        if now - self._last_watchlist_tick_time >= 600:
+            self.watchlist.tick(600)
+            self._last_watchlist_tick_time = now
 
         self._update_market_data(now)
-        self._update_interest_stock_manager(now)
+        self._update_watchlist(now)
 
     def process_once(self, app_id: str):
         if getattr(self, '_current_date', None) == None:
@@ -259,7 +259,7 @@ class TradeBot:
             return bot.get_dashboard_snapshot()
         return None
 
-    def _update_interest_stock_manager(self, now: float):
+    def _update_watchlist(self, now: float):
         # 8시부터 4시 30분 사이에만 관심 종목을 탐색한다.
         # 미리 준비하는 목적이어서 장 시작 조금 전부터 탐색을 시작한다.
         current_time = time.localtime(now)
@@ -312,7 +312,7 @@ class TradeBot:
         snapshot = SymbolSnapshot(symbol_item, now, price, volume)
         self.symbol_snapshot_cache.add_snapshot(snapshot)
 
-        if self.interest_stock_manager.update_stock(pdno, name, price, volume):
+        if self.watchlist.update_stock(pdno, name, price, volume):
             for bot in self.bots.values():
                 bot.update_sell_list()
 
@@ -690,7 +690,7 @@ class TradeSingleBot:
             
             if purchase_price > 0:
                 is_profit = float(check_order_result.avg_prvs) > purchase_price
-                self.parent.interest_stock_manager.apply_trade_result(pdno, is_profit)
+                self.parent.watchlist.apply_trade_result(pdno, is_profit)
 
             # 매도 후 해당 종목의 재진입을 금지하여 잦은 휩쏘로 인한 뇌동매매를 강도높게 방지한다.
             state.cooldown_until = time.time() + TradingParams.COOLDOWN_AFTER_SELL
@@ -930,7 +930,7 @@ class TradeSingleBot:
         monitor_pdnos = set()
 
         # 먼저 관심종목들을 모니터링 리스트에 추가
-        for stock in self.parent.interest_stock_manager.get_stocks():
+        for stock in self.parent.watchlist.get_stocks():
             self.monitor_list.append(stock)
             monitor_pdnos.add(stock.pdno)
 

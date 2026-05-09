@@ -42,11 +42,11 @@ class TradingParams:
     COOLDOWN_AFTER_SELL = 3600          # 매도 체결 후 재진입 금지 시간(초) [2026-04-29 1800→3600 일괄 변경: 뇌동매매 방지]
 
     # ── 종목 선정 필터 ──
-    MAX_STOCK_PRICE = 25000         # 관심종목 가격 상한
-    MIN_STOCK_PRICE = 7000          # 관심종목 가격 하한
-    INTEREST_STOCK_MAX = 15         # 관심종목 최대 보유 수
-    STOCK_EXPIRY_DAYS = 3           # 관심종목 만료 기간(일) - 이 기간 이후 자동 교체 대상
-    MIN_INTEREST_VOLUME = 100000    # 관심종목 진입 최소 거래량 (빈자리 품질 게이트)
+    WATCHLIST_ITEM_MAX_PRICE = 25000    # 관심종목 가격 상한
+    WATCHLIST_ITEM_MIN_PRICE = 7000     # 관심종목 가격 하한
+    WATCHLIST_ITEM_EXPIRY_DAYS = 3      # 관심종목 만료 기간(일) - 이 기간 이후 자동 교체 대상
+    WATCHLIST_ITEM_MAX_COUNT = 15       # 관심종목 최대 보유 수
+    WATCHLIST_ITEM_MIN_VOLUME = 100000  # 관심종목 진입 최소 거래량 (빈자리 품질 게이트)
 
     # ── 시장 분위기 필터 ──
     USE_MARKET_INDEX_FILTER = True  # 시장 지수 연동 진입 필터 사용 여부 [2026-04-29 추가]
@@ -81,17 +81,17 @@ class TradingParams:
             f"SELL_ORDER_TIMEOUT={cls.SELL_ORDER_TIMEOUT_SECONDS}s",
             f"COOLDOWN_AFTER_CANCEL={cls.COOLDOWN_AFTER_CANCEL}s",
             f"COOLDOWN_AFTER_SELL={cls.COOLDOWN_AFTER_SELL}s",
-            f"STOCK_PRICE_RANGE={cls.MIN_STOCK_PRICE}~{cls.MAX_STOCK_PRICE}",
-            f"INTEREST_STOCK_MAX={cls.INTEREST_STOCK_MAX}",
-            f"STOCK_EXPIRY_DAYS={cls.STOCK_EXPIRY_DAYS}",
-            f"MIN_INTEREST_VOLUME={cls.MIN_INTEREST_VOLUME}",
+            f"WATCHLIST_ITEM_PRICE_RANGE={cls.WATCHLIST_ITEM_MIN_PRICE}~{cls.WATCHLIST_ITEM_MAX_PRICE}",
+            f"WATCHLIST_ITEM_EXPIRY_DAYS={cls.WATCHLIST_ITEM_EXPIRY_DAYS}",
+            f"WATCHLIST_ITEM_MAX_COUNT={cls.WATCHLIST_ITEM_MAX_COUNT}",
+            f"WATCHLIST_ITEM_MIN_VOLUME={cls.WATCHLIST_ITEM_MIN_VOLUME}",
             "===========================",
         ]
         return "\n".join(lines)
 
 
 class SymbolFilter:
-    def is_not_interested_by_name(name: str) -> bool:
+    def is_not_watched_by_name(name: str) -> bool:
         if "인텍플러스" in name:
             # 관심없음
             return True
@@ -131,7 +131,7 @@ class SymbolFilter:
 
         return False
 
-    def is_not_interested_by_record(record) -> bool:
+    def is_not_watched_by_record(record) -> bool:
         """MST 마스터 레코드의 상태 필드를 이용한 사전 필터링.
         거래정지·정리매매·관리종목·SPAC·ETP·투자주의종목을 제외한다."""
         # 거래정지
@@ -154,11 +154,11 @@ class SymbolFilter:
             return True
         return False
 
-    def is_not_interested_by_price(price: int) -> bool:
-        if price > TradingParams.MAX_STOCK_PRICE:
+    def is_not_watched_by_price(price: int) -> bool:
+        if price > TradingParams.WATCHLIST_ITEM_MAX_PRICE:
             return True
 
-        if price <= TradingParams.MIN_STOCK_PRICE:
+        if price <= TradingParams.WATCHLIST_ITEM_MIN_PRICE:
             return True
 
         return False

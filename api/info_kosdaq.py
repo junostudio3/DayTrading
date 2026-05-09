@@ -210,9 +210,9 @@ def load_kosdaq_master(filepath: str = None) -> List[KosdaqCode]:
                 break  # 불완전한 레코드 무시
             record = _parse_record(raw[:RECORD_SIZE])
             name = record.hts_kor_isnm
-            if SymbolFilter.is_not_interested_by_name(name):
+            if SymbolFilter.is_not_watched_by_name(name):
                 continue
-            if SymbolFilter.is_not_interested_by_record(record):
+            if SymbolFilter.is_not_watched_by_record(record):
                 continue
             records.append(record)
 
