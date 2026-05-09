@@ -4,7 +4,6 @@ from api.market_data_service import MarketDataService
 from api.kis_user import KisUser
 from api.kis_user import KisUserManager
 from api.special_days import SpecialDays
-from KisKey import get_kis_user_manager
 from KisKey import data_go_kr_api_key
 from api.info_kosdaq import load_kosdaq_master
 from api.info_kospi import load_kospi_master
@@ -58,9 +57,12 @@ class TradeBot:
         self.market_index_kosdaq: float = 0.0
         self.market_index_kosdaq_drop_rate: float = 0.0
 
-        self.user_manager: KisUserManager = get_kis_user_manager(self.log)
+        self.user_manager = KisUserManager()
+        # KisKey.json 파일에서 사용자 정보를 읽어와서 user_manager에 추가한다.
+        self._load_users("./KisKey.json")
+
         if len(self.user_manager.users) == 0:
-            raise ValueError("사용자 정보가 없습니다. KisKey.py 파일을 확인해주세요.")
+            raise ValueError("사용자 정보가 없습니다. KisKey.json 파일을 확인해주세요.")
         else:
             # 가격 조회 서비스 초기화
             self._market_data_service = MarketDataService(self.user_manager.users[0].auth)
@@ -73,6 +75,48 @@ class TradeBot:
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
+
+    def _load_users(self, json_path: str):
+        # json_path 경로에 있는 JSON 파일에서 사용자 정보를 읽어와서 user_manager에 추가한다.
+        # JSON 파일은 사용자 정보의 리스트 형태로 되어 있어야 한다.
+        # 각 사용자 정보는 app_id, api_key, api_secret, account_number, is_virtual 필드를 포함해야 한다.
+        import json
+        if not os.path.exists(json_path):
+            self.log(f"사용자 정보 파일이 존재하지 않습니다: {json_path}")
+            return
+
+        try:
+            with open(json_path, "r") as f:
+                users_data = json.load(f)
+                if not "users" in users_data:
+                    self.log(f"사용자 정보 항목에 'users' 필드가 없습니다. 항목을 건너뜁니다: {users_data}")
+                    return
+
+                for user_data in users_data["users"]:
+                    is_virtual = user_data["is_virtual"]
+                    user = KisUser(user_data["id"],
+                        user_data["key"],
+                        user_data["secret"],
+                        user_data["account"],
+                        is_virtual,
+                        self.log)
+                    
+                    is_valid = True
+                    while True:
+                        if user.update_account(5):
+                            break
+                        if is_virtual:
+                            # 모의투자 때문에 시작을 못하는 것은 좋지 않으므로
+                            # 모의투자 계좌는 계좌 정보 업데이트에 실패하더라도 계속 진행한다.
+                            is_valid = False
+                            break
+                        time.sleep(1)
+                    if not is_valid:
+                        self.log(f"사용자 {user.app_id}는 모의투자 계좌가 계좌 정보 업데이트에 실패했습니다. 무시됩니다. 추후 확인하세요")
+                        continue
+                    self.user_manager.add_user(user)
+        except Exception as e:
+            self.log(f"사용자 정보 파일을 읽어오는 중 오류가 발생했습니다: {e}")
 
     def _day_initialize(self, now: float) -> bool:
         local_time = time.localtime(now)
@@ -195,7 +239,7 @@ class TradeBot:
                 if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
                     # 모든 봇의 계좌 정보를 업데이트하고 기록한다.
                     for bot in self.bots.values():
-                        bot.update_account_stock()
+                        bot.update_account()
                         bot.record_account_history()
                     self.daily_end_logged = True
 
@@ -212,7 +256,7 @@ class TradeBot:
             if not self.daily_start_logged:
                 # 장 시작 시점에 모든 봇의 계좌 정보를 업데이트하고 기록한다.
                 for bot in self.bots.values():
-                    bot.update_account_stock()
+                    bot.update_account()
                     bot.record_account_history()
                 self.daily_start_logged = True
 
@@ -585,7 +629,7 @@ class TradeSingleBot:
 
         if check_order_result is not None and check_order_result.rmn_qty == 0:
             # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
-            self.update_account_stock()
+            self.update_account()
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.avg_prvs)  # 매수 체결 로그 추가
@@ -598,7 +642,7 @@ class TradeSingleBot:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
                 check_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
                 self.auth.order.cancel_order(state.buy_order_no)
-                self.update_account_stock()
+                self.update_account()
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
@@ -682,7 +726,7 @@ class TradeSingleBot:
             purchase_price = float(inventory['pchs_avg_pric']) if inventory else 0.0
 
             # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
-            self.update_account_stock()
+            self.update_account()
 
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
@@ -703,7 +747,7 @@ class TradeSingleBot:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
                 check_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
                 self.auth.order.cancel_order(state.sell_order_no)
-                self.update_account_stock()
+                self.update_account()
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
@@ -893,7 +937,7 @@ class TradeSingleBot:
         price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         result = self.buy(symbol_item, quantity, price)
-        self.update_account_stock()
+        self.update_account()
         return result
 
     def place_manual_sell(self, pdno: str, quantity: int):
@@ -920,11 +964,11 @@ class TradeSingleBot:
         if result is None:
             raise ValueError("매도 주문이 실패했습니다.")
 
-        self.update_account_stock()
+        self.update_account()
         return result
 
     def update_sell_list(self):
-        self.update_account_stock()
+        self.update_account()
 
         self.monitor_list: list[SymbolItem] = []
         monitor_pdnos = set()
@@ -942,7 +986,7 @@ class TradeSingleBot:
                 self.monitor_list.append(SymbolItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
 
-    def update_account_stock(self):
+    def update_account(self):
         try_count = 0
         while True:
             try:

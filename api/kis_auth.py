@@ -51,31 +51,34 @@ class KisAuth:
                 if datetime.now() < expires_at - timedelta(minutes=5):  # 만료 5분 전까지 유효하다고 간주
                     return token_data["access_token"]
 
-            response = requests.post(
-                f"{self.domain}/oauth2/token",
-                data={
-                    "grant_type": "client_credentials",
-                    "appkey": self.api_key,
-                    "appsecret": self.secret_key
-                },
-                timeout=10
-            )
-            if response.status_code == 200:
-                token_info = response.json()
-                access_token = token_info["access_token"]
-                expires_in = token_info["expires_in"]
+            try:
+                response = requests.post(
+                    f"{self.domain}/oauth2/token",
+                    data={
+                        "grant_type": "client_credentials",
+                        "appkey": self.api_key,
+                        "appsecret": self.secret_key
+                    },
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    token_info = response.json()
+                    access_token = token_info["access_token"]
+                    expires_in = token_info["expires_in"]
 
-                # 토큰과 만료 시간을 캐시에 저장
-                token_data = {
-                    "access_token": access_token,
-                    "expires_at": (datetime.now() + timedelta(seconds=expires_in)).isoformat()
-                }
-                with open(self.token_cache_file, "w") as f:
-                    json.dump(token_data, f)
+                    # 토큰과 만료 시간을 캐시에 저장
+                    token_data = {
+                        "access_token": access_token,
+                        "expires_at": (datetime.now() + timedelta(seconds=expires_in)).isoformat()
+                    }
+                    with open(self.token_cache_file, "w") as f:
+                        json.dump(token_data, f)
 
-                return access_token
-            else:
-                raise Exception(f"Failed to get access token: {response.status_code} {response.text}")
+                    return access_token
+                else:
+                    raise Exception(f"Failed to get access token: {response.status_code} {response.text}")
+            except Exception as e:
+                raise Exception(f"Error while getting access token: {e}")
 
     def _wait_for_rate_limit(self):
         with self._rate_limit_lock:
