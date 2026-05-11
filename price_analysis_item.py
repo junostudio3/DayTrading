@@ -433,7 +433,8 @@ class PriceAnalysisItem:
         # buy_time이 있으면 그 이후의 캔들만, 없으면 최근 12개(1시간) 캔들 검사
         valid_candles = [c for c in candles if c.start_time >= buy_time] if buy_time > 0.0 else candles[-12:]
         if valid_candles:
-            max_high = max(c.high_price for c in valid_candles)
+            # [2026-05-12 수정] 윗꼬리 노이즈로 인한 휩쏘 방지를 위해, 캔들의 고가(high_price) 대신 몸통의 상단(open_price와 close_price 중 큰 값)을 기준 고가로 사용
+            max_high = max(max(c.open_price, c.close_price) for c in valid_candles)
             max_profit_rate = (max_high - purchase_price) / purchase_price
             
             # 최고가 기준 수익률이 트리거를 넘었고, 현재가가 최고가 대비 드랍 폭 이상 빠졌다면 익절 검토
