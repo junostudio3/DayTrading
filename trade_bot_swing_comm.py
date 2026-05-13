@@ -1,11 +1,11 @@
 from api.kis_user import KisUser
 from trade_bot_swing import TradeBotSwing
-from watchlist import Watchlist
+from swing_watchlist import SwingWatchlist
 
 
 class TradeBotSwingComm:
     def __init__(self):
-        self.watchlist = Watchlist("./cache/swing_watchlist.json")
+        self.watchlist = SwingWatchlist("./cache/swing_watchlist.json")
         self.bots: dict[str, TradeBotSwing] = {}
         # app_id 별로 스윙 봇이 몇 번 프로세스에 진입했는지 카운트하는 딕셔너리
         self.swing_process_counters: dict[str, int] = {}

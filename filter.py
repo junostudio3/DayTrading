@@ -49,6 +49,10 @@ class TradingParams:
     WATCHLIST_ITEM_MAX_COUNT = 15       # 관심종목 최대 보유 수
     WATCHLIST_ITEM_MIN_VOLUME = 100000  # 관심종목 진입 최소 거래량 (빈자리 품질 게이트)
 
+    # ── 종목 선정 필터 (Swing) ──
+    SWINGWATCHLIST_ITEM_EXPIRY_DAYS = 1     # 스윙 관심종목 만료 기간(일) (매일 교체 - 괜찮으면 샀을거고 사면 어차피 리스트에 있을테니)
+    SWINGWATCHLIST_ITEM_MAX_COUNT = 30       # 스윙 관심종목 최대 보유 수 (단타보다 여유롭게)
+
     # ── 시장 분위기 필터 ──
     USE_MARKET_INDEX_FILTER = True  # 시장 지수 연동 진입 필터 사용 여부 [2026-04-29 추가]
     MARKET_INDEX_DROP_LIMIT = -1.5  # KOSDAQ 지수가 전일 대비 이 수치(%) 이하로 하락 중이면 신규 진입 차단 [2026-04-29 추가]

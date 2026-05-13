@@ -20,7 +20,7 @@ class TradeBotSwing:
         self.notified_sell_candidates = set()
         self.monitor_list: list[SymbolItem] = []
 
-        self.update_sell_list()
+        self.update_monitoring_list()
 
     def set_logger(self, log):
         self.log = log
@@ -41,17 +41,15 @@ class TradeBotSwing:
         else:
             for stock in self.auth.account.stocks:
                 # 단타 봇이 관리하지 않는 종목만
-                daily_bot = self.parent.bots.get(self.app_id)
-                if daily_bot and stock['pdno'] in daily_bot.bot_purchased_pdnos:
+                if self.parent.daily.is_managing_pdno(self.app_id, stock['pdno']):
                     continue
                 self.log(f"Swing 대상 - 종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
-    def update_sell_list(self):
+    def update_monitoring_list(self):
         new_list = []
         for stock_pdno in self.auth.account.stocks_by_pdno:
-            daily_bot = self.parent.bots.get(self.app_id)
-            if daily_bot and stock_pdno in daily_bot.bot_purchased_pdnos:
-                continue
+            if self.parent.daily.is_managing_pdno(self.app_id, stock_pdno):
+                continue  # 단타 봇이 관리하는 종목은 스윙 봇에서 제외
             
             stock = self.auth.account.stocks_by_pdno[stock_pdno]
             name = stock.get("prdt_name", stock_pdno)
@@ -79,8 +77,7 @@ class TradeBotSwing:
         pdno = symbol_item.pdno
         inventory = self._find_inventory(pdno)
 
-        daily_bot = self.parent.bots.get(self.app_id)
-        if daily_bot and pdno in daily_bot.bot_purchased_pdnos:
+        if self.parent.daily.is_managing_pdno(self.app_id, pdno):
             return  # 데일리 봇 관리 대상은 무시
 
         current_price = None
@@ -130,6 +127,7 @@ class TradeBotSwing:
 
         result = self.auth.order_cash_sell(symbol_item.pdno, quantity, price)
         self.update_account()
+        self.update_monitoring_list()
         return result
 
     def get_dashboard_snapshot(self) -> Optional[dict]:

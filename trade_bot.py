@@ -354,7 +354,7 @@ class TradeBot:
 
         if self.swing.watchlist.update_stock(pdno, name, price, volume):
             for swing_bot in self.swing.bots.values():
-                swing_bot.update_sell_list()
+                swing_bot.update_monitoring_list()
 
     def _update_market_data(self, now: float):
         # 모든 봇의 모니터링 리스트에서 중복을 제거한 관심 종목을 추출
