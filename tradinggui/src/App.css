@@ -274,3 +274,11 @@ tbody tr.selected { background: #094771; }
     min-height: 0;
   }
 }
+
+.desktop-watch-tabs {
+  display: flex !important;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.desktop-watch-tabs button { background: transparent; color:#aaa; border:none; cursor:pointer; padding:0 0 4px; font-size:1.1rem; }
+.desktop-watch-tabs button.active { color:#fff; border-bottom: 2px solid #007acc; }

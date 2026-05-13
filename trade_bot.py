@@ -6,13 +6,13 @@ from KisKey import data_go_kr_api_key
 from api.info_kosdaq import load_kosdaq_master
 from api.info_kospi import load_kospi_master
 from price_analysis import PriceAnalysis
-from watchlist import Watchlist
 from typing import Optional
 from typing import List
 from common_structure import SymbolItem
 from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
 from filter import TradingParams
-from trade_bot_daily import TradeBotDaily
+from trade_bot_daily_comm import TradeBotDailyComm
+from trade_bot_swing_comm import TradeBotSwingComm
 
 import io
 import os
@@ -30,7 +30,8 @@ class TradeBot:
         self.trade_log = None
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis/")
-        self.watchlist = Watchlist("./cache/watchlist.json")
+        self.daily = TradeBotDailyComm()
+        self.swing = TradeBotSwingComm()
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
         self.valid_pdno_set: set[str] = set()
@@ -53,11 +54,10 @@ class TradeBot:
             # 가격 조회 서비스 초기화
             self._market_data_service = MarketDataService(self.user_manager.users[0].auth)
 
-        self.bots: dict[str, TradeBotDaily] = {}
         for user in self.user_manager.users:
             try:
-                bot = TradeBotDaily(self, user)
-                self.bots[user.app_id] = bot
+                self.daily.add_bot(self, user)
+                self.swing.add_bot(self, user)
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
@@ -159,17 +159,17 @@ class TradeBot:
     def set_logger(self, log):
         self.log = log
         self.user_manager.set_logger(log)
-        for bot in self.bots.values():
-            bot.set_logger(log)
+        self.daily.set_logger(log)
+        self.swing.set_logger(log)
 
     def set_trade_logger(self, log):
         self.trade_log = log
-        for bot in self.bots.values():
-            bot.set_trade_logger(log)
+        self.daily.set_trade_logger(log)
+        self.swing.set_trade_logger(log)
 
     def display_account_info(self):
-        for bot in self.bots.values():
-            bot.display_account_info()
+        self.daily.display_account_info()
+        self.swing.display_account_info()
 
     def update_market_and_stock_data(self, now: float):
         local_time = time.localtime(now)
@@ -196,7 +196,8 @@ class TradeBot:
             self._last_watchlist_tick_time = now
 
         if now - self._last_watchlist_tick_time >= 600:
-            self.watchlist.tick(600)
+            self.daily.update_tick(600)
+            self.swing.update_tick(600)
             self._last_watchlist_tick_time = now
 
         self._update_market_data(now)
@@ -224,7 +225,7 @@ class TradeBot:
                 # 장이 열려 있다가 닫힌 경우
                 if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
                     # 모든 봇의 계좌 정보를 업데이트하고 기록한다.
-                    for bot in self.bots.values():
+                    for bot in self.daily.bots.values():
                         bot.update_account()
                         bot.record_account_history()
                     self.daily_end_logged = True
@@ -241,16 +242,18 @@ class TradeBot:
             # 장이 닫혀 있다가 열린 경우 (장 시작)
             if not self.daily_start_logged:
                 # 장 시작 시점에 모든 봇의 계좌 정보를 업데이트하고 기록한다.
-                for bot in self.bots.values():
+                for bot in self.daily.bots.values():
                     bot.update_account()
                     bot.record_account_history()
                 self.daily_start_logged = True
 
         self.is_running = True
 
-        bot = self.bots.get(app_id)
+        bot = self.daily.bots.get(app_id)
         if bot:
             bot.process_once(now)
+        
+        self.swing.process_once(app_id, now)
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:
@@ -274,19 +277,22 @@ class TradeBot:
         return None
 
     def place_manual_buy(self, app_id: str, pdno: str, quantity: int):
-        bot = self.bots.get(app_id)
-        if bot:
-            return bot.place_manual_buy(pdno, quantity)
+        self.swing.manual_buy(app_id, pdno, quantity)
         
     def place_manual_sell(self, app_id: str, pdno: str, quantity: int):
-        bot = self.bots.get(app_id)
-        if bot:
-            return bot.place_manual_sell(pdno, quantity)
+        self.swing.manual_sell(app_id, pdno, quantity)
 
     def get_dashboard_snapshot(self, app_id: str) -> Optional[dict]:
-        bot = self.bots.get(app_id)
+        bot = self.daily.bots.get(app_id)
         if bot:
-            return bot.get_dashboard_snapshot()
+            snapshot = bot.get_dashboard_snapshot()
+            if snapshot:
+                swing_bot = self.swing.bots.get(app_id)
+                if swing_bot:
+                    swing_snap = swing_bot.get_dashboard_snapshot()
+                    if swing_snap and "swing_watch" in swing_snap:
+                        snapshot["swing_watch"] = swing_snap["swing_watch"]
+            return snapshot
         return None
 
     def _update_watchlist(self, now: float):
@@ -342,9 +348,13 @@ class TradeBot:
         snapshot = SymbolSnapshot(symbol_item, now, price, volume)
         self.symbol_snapshot_cache.add_snapshot(snapshot)
 
-        if self.watchlist.update_stock(pdno, name, price, volume):
-            for bot in self.bots.values():
+        if self.daily.watchlist.update_stock(pdno, name, price, volume):
+            for bot in self.daily.bots.values():
                 bot.update_sell_list()
+
+        if self.swing.watchlist.update_stock(pdno, name, price, volume):
+            for swing_bot in self.swing.bots.values():
+                swing_bot.update_sell_list()
 
     def _update_market_data(self, now: float):
         # 모든 봇의 모니터링 리스트에서 중복을 제거한 관심 종목을 추출
@@ -378,7 +388,7 @@ class TradeBot:
                 self.log(f"시장 지수 업데이트 중 오류: {e}")
 
         monitor_dict: dict[str, SymbolItem] = {}
-        for bot in self.bots.values():
+        for bot in self.daily.bots.values():
             for item in bot.monitor_list:
                 if item.pdno not in monitor_dict:
                     monitor_dict[item.pdno] = item

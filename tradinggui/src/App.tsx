@@ -36,6 +36,7 @@ interface Snapshot {
   loop_count: number;
   holdings: Holding[];
   watch: WatchItem[];
+  swing_watch?: WatchItem[];
   logs: string[];
   trade_logs: string[];
 }
@@ -186,7 +187,7 @@ function Dashboard() {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
-  const [marketTab, setMarketTab] = useState<'holdings' | 'watch'>('holdings');
+  const [marketTab, setMarketTab] = useState<'holdings' | 'watch' | 'swing_watch'>('holdings');
   const [tab, setTab] = useState<'trade_logs' | 'logs' | 'history' | 'profit_history'>('trade_logs');
   const [orderModal, setOrderModal] = useState<{ show: boolean; side: 'buy' | 'sell'; pdno: string | null }>({ show: false, side: 'buy', pdno: null });
   const [orderQty, setOrderQty] = useState<string>('');
@@ -304,6 +305,40 @@ function Dashboard() {
     </div>
   );
 
+
+  const renderSwingWatchSection = (className = 'section') => (
+    <div className={className}>
+      <h2>결과 스윙종목 (Swing Watchlist)</h2>
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>종목</th>
+              <th>이름</th>
+              <th>현재가</th>
+              <th>캔들수</th>
+              <th>체결량</th>
+              <th>매수</th>
+            </tr>
+          </thead>
+          <tbody>
+            {snapshot?.swing_watch?.map((w) => (
+              <tr key={w.pdno} onClick={() => setSelectedPdno(w.pdno)} className={selectedPdno === w.pdno ? 'selected' : ''}>
+                <td>{w.pdno}</td>
+                <td>{w.name}</td>
+                <td>{w.price?.toLocaleString()}</td>
+                <td>{w.candles}</td>
+                <td>{w.volume?.toLocaleString()}</td>
+                <td>
+                  <button className="btn-buy" onClick={(e) => { e.stopPropagation(); setOrderModal({ show: true, side: 'buy', pdno: w.pdno }); }}>매수</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
   const renderWatchSection = (className = 'section') => (
     <div className={className}>
       <h2>관심종목 (Watchlist)</h2>
@@ -373,9 +408,11 @@ function Dashboard() {
           <div className="market-tabs" role="tablist" aria-label="보유주식과 관심종목">
             <button className={marketTab === 'holdings' ? 'active' : ''} onClick={() => setMarketTab('holdings')}>보유주식</button>
             <button className={marketTab === 'watch' ? 'active' : ''} onClick={() => setMarketTab('watch')}>관심종목</button>
+            <button className={marketTab === 'swing_watch' ? 'active' : ''} onClick={() => setMarketTab('swing_watch')}>관심스윙종목</button>
           </div>
           {renderHoldingsSection(`section mobile-tab-section ${marketTab === 'holdings' ? 'active' : ''}`)}
           {renderWatchSection(`section mobile-tab-section ${marketTab === 'watch' ? 'active' : ''}`)}
+          {renderSwingWatchSection(`section mobile-tab-section ${marketTab === 'swing_watch' ? 'active' : ''}`)}
           {renderHoldingsSection('section desktop-holdings-section')}
           <div className="section chart-section">
             <h2>그래프 ({selectedPdno || '종목 선택'})</h2>
@@ -386,7 +423,11 @@ function Dashboard() {
         </div>
 
         <div className="right-panel desktop-watch-panel">
-          {renderWatchSection()}
+          <div className="market-tabs desktop-watch-tabs">
+            <button className={marketTab !== 'swing_watch' ? 'active' : ''} onClick={() => setMarketTab('watch')}>매일관심 (Day)</button>
+            <button className={marketTab === 'swing_watch' ? 'active' : ''} onClick={() => setMarketTab('swing_watch')}>스윙관심 (Swing)</button>
+          </div>
+          {marketTab === 'swing_watch' ? renderSwingWatchSection() : renderWatchSection()}
         </div>
       </div>
 

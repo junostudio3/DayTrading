@@ -36,8 +36,42 @@ class TradeBotDaily:
         self.buy_fail_counts: dict[str, int] = {}
         self.monitor_list: list[SymbolItem] = []
         self.trade_reporter = TradeReporter(self)
+        
+        self.bot_purchases_path = f"./cache/daily_bot_purchases_{self.app_id}.json"
+        self.bot_purchased_pdnos = set()
+        self._load_bot_purchases()
 
         self.update_sell_list()
+
+    def _load_bot_purchases(self):
+        import json
+        import os
+        if os.path.exists(self.bot_purchases_path):
+            try:
+                with open(self.bot_purchases_path, "r") as f:
+                    data = json.load(f)
+                    self.bot_purchased_pdnos = set(data.get("purchased_pdnos", []))
+            except Exception as e:
+                self.log(f"봇 구매 내역 로드 중 오류 발생: {e}")
+
+    def _save_bot_purchases(self):
+        import json
+        import os
+        try:
+            os.makedirs(os.path.dirname(self.bot_purchases_path), exist_ok=True)
+            with open(self.bot_purchases_path, "w") as f:
+                json.dump({"purchased_pdnos": list(self.bot_purchased_pdnos)}, f)
+        except Exception as e:
+            self.log(f"봇 구매 내역 저장 중 오류 발생: {e}")
+
+    def add_bot_purchase(self, pdno: str):
+        self.bot_purchased_pdnos.add(pdno)
+        self._save_bot_purchases()
+
+    def remove_bot_purchase(self, pdno: str):
+        if pdno in self.bot_purchased_pdnos:
+            self.bot_purchased_pdnos.remove(pdno)
+            self._save_bot_purchases()
 
     def set_logger(self, log):
         self.log = log
@@ -76,16 +110,42 @@ class TradeBotDaily:
 
         # self.auth.account.stocks 내에 현재 심볼이 존재하는지 확인하여 매도 주문 단계로 이동
         if self._find_inventory(pdno) is not None:
-            state.step = TradeStep.DECIDE_ON_SELL
-            self._symbol_log(symbol_item, "보유 수량이 확인되어 매도 주문 단계로 이동합니다.")
+            if pdno in self.bot_purchased_pdnos:
+                state.step = TradeStep.DECIDE_ON_SELL
+                self._symbol_log(symbol_item, "봇이 매수했던 보유 수량이 확인되어 매도 주문 단계로 이동합니다.")
+            else:
+                # self._symbol_log(symbol_item, "수동으로 매수/보유 중인 종목이므로 단타 봇이 개입하지 않고 무시합니다.")
+                pass
             return
-        
+        else:
+            if pdno in self.bot_purchased_pdnos:
+                self.remove_bot_purchase(pdno)
+
         if not self.parent.price_analysis.is_purchase_overtime(pdno):
             # 보유 수량이 없는 경우 매수 주문 단계로 이동
             # 단 3시부터는 매도를 시작하므로 2시 50분부터는 그냥 판단 단계에 머무르도록 한다.
             state.step = TradeStep.DECIDE_ON_PURCHASE
             self._symbol_log(symbol_item, "보유 수량이 없어서 매수 주문 단계로 이동합니다.")
             return
+
+    def _add_daily_purchase(self, pdno: str):
+        purchases = self._get_daily_purchases()
+        purchases.add(pdno)
+        with open(self.daily_bot_purchases_file, "w") as f:
+            json.dump(list(purchases), f)
+
+    def _remove_daily_purchase(self, pdno: str):
+        purchases = self._get_daily_purchases()
+        if pdno in purchases:
+            purchases.remove(pdno)
+            with open(self.daily_bot_purchases_file, "w") as f:
+                json.dump(list(purchases), f)
+
+    def _get_daily_purchases(self):
+        if os.path.exists(self.daily_bot_purchases_file):
+            with open(self.daily_bot_purchases_file, "r") as f:
+                return set(json.load(f))
+        return set()
 
     def _process_step_order_buy(self, symbol_item: SymbolItem):
         pdno = symbol_item.pdno
@@ -169,6 +229,7 @@ class TradeBotDaily:
         order_no = order.get("ODNO", "")
         self.trade_reporter.add(TradeType.BUY, symbol_item, order_quantity, current_price)
         state.buy_order_no = order_no
+        self.add_bot_purchase(pdno)
         state.buy_order_requested_at = time.time()
         state.step = TradeStep.WAIT_ACCEPT_PURCHASE
 
@@ -290,7 +351,7 @@ class TradeBotDaily:
             
             if purchase_price > 0:
                 is_profit = float(check_order_result.avg_prvs) > purchase_price
-                self.parent.watchlist.apply_trade_result(pdno, is_profit)
+                self.parent.daily.watchlist.apply_trade_result(pdno, is_profit)
 
             # 매도 후 해당 종목의 재진입을 금지하여 잦은 휩쏘로 인한 뇌동매매를 강도높게 방지한다.
             state.cooldown_until = time.time() + TradingParams.COOLDOWN_AFTER_SELL
@@ -530,7 +591,7 @@ class TradeBotDaily:
         monitor_pdnos = set()
 
         # 먼저 관심종목들을 모니터링 리스트에 추가
-        for stock in self.parent.watchlist.get_stocks():
+        for stock in self.parent.daily.watchlist.get_stocks():
             self.monitor_list.append(stock)
             monitor_pdnos.add(stock.pdno)
 

@@ -116,6 +116,42 @@ class OrderRequest(BaseModel):
     quantity: int
 
 
+
+class SwingWatchlistAddRequest(BaseModel):
+    pdno: str
+    name: str
+
+@app.get("/swing_watchlist")
+async def get_swing_watchlist():
+    if not engine:
+        raise HTTPException(status_code=503, detail="TradingEngine not initialized")
+    if not getattr(engine.bot, "swing", None):
+        return []
+    return [{"pdno": item.stock.pdno, "prdt_name": item.stock.prdt_name} for item in engine.bot.swing.watchlist.items]
+
+@app.post("/swing_watchlist")
+async def add_swing_watchlist(req: SwingWatchlistAddRequest):
+    if not engine:
+        raise HTTPException(status_code=503, detail="TradingEngine not initialized")
+    if getattr(engine.bot, "swing", None):
+        engine.bot.swing.watchlist.update_stock(req.pdno, req.name, 0, 0)
+        for swing_bot in engine.bot.swing_bots.values():
+            swing_bot.update_sell_list()
+    return {"message": "success"}
+
+@app.delete("/swing_watchlist/{pdno}")
+async def delete_swing_watchlist(pdno: str):
+    if not engine:
+        raise HTTPException(status_code=503, detail="TradingEngine not initialized")
+    if getattr(engine.bot, "swing", None):
+        existing = next((item for item in engine.bot.swing.watchlist.items if item.stock.pdno == pdno), None)
+        if existing:
+            engine.bot.swing.watchlist.items.remove(existing)
+            engine.bot.swing.watchlist.save()
+            for swing_bot in engine.bot.swing_bots.values():
+                swing_bot.update_sell_list()
+    return {"message": "success"}
+
 @app.get("/users")
 async def get_users():
     if not engine:

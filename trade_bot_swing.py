@@ -1,0 +1,170 @@
+import time
+from typing import Optional
+from filter import TradingParams
+from common_structure import SymbolItem
+from trade_reporter import TradeReporter
+from telegram import Telegram
+from api.kis_user import KisUser
+
+
+class TradeBotSwing:
+    def __init__(self, parent, user: KisUser):
+        self.parent = parent
+        self.log = parent.log
+        self.trade_log = parent.trade_log
+        self.auth = user.auth
+        self.app_id = user.app_id
+
+        self.loop_count = 0
+        self.notified_buy_candidates = set()
+        self.notified_sell_candidates = set()
+        self.monitor_list: list[SymbolItem] = []
+
+        self.update_sell_list()
+
+    def set_logger(self, log):
+        self.log = log
+
+    def set_trade_logger(self, log):
+        self.trade_log = log
+
+    def update_account(self, retry_count: int = 5):
+        return self.auth.update_account(retry_count)
+
+    def record_account_history(self):
+        pass
+
+    def display_account_info(self):
+        self.log("Swing 봇 주식 잔고:")
+        if not self.auth.account.stocks:
+            self.log("보유 주식이 없습니다.")
+        else:
+            for stock in self.auth.account.stocks:
+                # 단타 봇이 관리하지 않는 종목만
+                daily_bot = self.parent.bots.get(self.app_id)
+                if daily_bot and stock['pdno'] in daily_bot.bot_purchased_pdnos:
+                    continue
+                self.log(f"Swing 대상 - 종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
+
+    def update_sell_list(self):
+        new_list = []
+        for stock_pdno in self.auth.account.stocks_by_pdno:
+            daily_bot = self.parent.bots.get(self.app_id)
+            if daily_bot and stock_pdno in daily_bot.bot_purchased_pdnos:
+                continue
+            
+            stock = self.auth.account.stocks_by_pdno[stock_pdno]
+            name = stock.get("prdt_name", stock_pdno)
+            item = SymbolItem(stock_pdno, name)
+            new_list.append(item)
+
+        stocks_list = self.parent.swing.watchlist.get_stocks()
+        for watchlist_item in stocks_list:
+            if not any(x.pdno == watchlist_item.pdno for x in new_list):
+                new_list.append(SymbolItem(watchlist_item.pdno, watchlist_item.prdt_name))
+
+        self.monitor_list = new_list
+
+    def process_once(self, now: float):
+        self.loop_count += 1
+        
+        # 주기적으로 체결 잔고 동기화 (단타봇과 동일하거나 생략 가능, 단타봇이 해주므로)
+        for symbol_item in self.monitor_list:
+            self._process_step_judge(symbol_item, now)
+
+    def _find_inventory(self, pdno: str):
+        return self.auth.account.stocks_by_pdno.get(pdno)
+
+    def _process_step_judge(self, symbol_item: SymbolItem, now: float):
+        pdno = symbol_item.pdno
+        inventory = self._find_inventory(pdno)
+
+        daily_bot = self.parent.bots.get(self.app_id)
+        if daily_bot and pdno in daily_bot.bot_purchased_pdnos:
+            return  # 데일리 봇 관리 대상은 무시
+
+        current_price = None
+        if pdno in self.parent.price_analysis.items and self.parent.price_analysis.items[pdno].candle_stick_5minute:
+            current_price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+
+        if current_price is None:
+            return
+
+        # 30일 이평선
+        avg_30d = self.parent._market_data_service.get_average_price_30day(pdno)
+        if avg_30d is None or avg_30d <= 0:
+            return
+
+        if inventory is not None:
+            # 매도 권장 모니터링: 가격이 30일 이평선 밑으로 떨어지면 알림
+            if current_price < avg_30d:
+                if pdno not in self.notified_sell_candidates:
+                    msg = f"📉 [Swing 매도 권장] {symbol_item.prdt_name}({pdno})\n현재가({current_price})가 30일 평균가({avg_30d})를 하회했습니다."
+                    Telegram.send_message(msg)
+                    self.notified_sell_candidates.add(pdno)
+        else:
+            # 매수 후보 발굴 모니터링
+            if current_price > avg_30d:
+                if pdno not in self.notified_buy_candidates:
+                    msg = f"📈 [Swing 매수 후보] {symbol_item.prdt_name}({pdno})\n현재가({current_price})가 30일 평균가({avg_30d})를 돌파했습니다."
+                    Telegram.send_message(msg)
+                    self.notified_buy_candidates.add(pdno)
+
+    def place_manual_buy(self, pdno: str, quantity: int):
+        if quantity <= 0:
+            raise ValueError("수량은 1 이상이어야 합니다.")
+        
+        symbol_item = self.parent.price_analysis.items[pdno].symbol_item
+        price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+
+        result = self.auth.order_cash_buy(symbol_item.pdno, quantity, price)
+        self.update_account()
+        return result
+
+    def place_manual_sell(self, pdno: str, quantity: int):
+        if quantity <= 0:
+            raise ValueError("수량은 1 이상이어야 합니다.")
+        
+        symbol_item = self.parent.price_analysis.items[pdno].symbol_item
+        price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+
+        result = self.auth.order_cash_sell(symbol_item.pdno, quantity, price)
+        self.update_account()
+        return result
+
+    def get_dashboard_snapshot(self) -> Optional[dict]:
+        pdno_to_name = {}
+        watch_pdnos = []
+        watch_pdno_set = set()
+        for item in self.monitor_list:
+            pdno = item.pdno
+            if not pdno:
+                continue
+            pdno_to_name[pdno] = item.prdt_name
+            if pdno not in watch_pdno_set:
+                watch_pdnos.append(pdno)
+                watch_pdno_set.add(pdno)
+
+        watch_rows = []
+        for pdno in watch_pdnos:
+            item = self.parent.price_analysis.items.get(pdno)
+            current_price = None
+            candle_count = 0
+            volume = 0
+            if item is not None and item.candle_stick_5minute:
+                candle_count = len(item.candle_stick_5minute)
+                current_price = item.candle_stick_5minute[-1].close_price
+                volume = item.candle_stick_5minute[-1].volume
+
+            watch_rows.append({
+                "pdno": pdno,
+                "name": pdno_to_name.get(pdno, pdno),
+                "price": current_price,
+                "candles": candle_count,
+                "volume": volume,
+                "step": "-",
+            })
+
+        return {
+            "swing_watch": watch_rows
+        }

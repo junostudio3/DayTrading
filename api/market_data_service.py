@@ -13,7 +13,7 @@ class MarketDataService:
         params = {
             "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
             "fid_input_iscd": pdno,
-            "fid_period_div_code": "W", # 기간 분류 코드 (D:30일, W:30주, M:30개월)
+            "fid_period_div_code": "D", # 기간 분류 코드 (D:30일, W:30주, M:30개월)
             "fid_org_adj_prc": "1", # 수정주가 여부 (0:미수정, 1:수정)
         }
 
