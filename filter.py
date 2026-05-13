@@ -22,6 +22,7 @@ class TradingParams:
     TRAILING_STOP_DROP = 0.008      # 고점 대비 이만큼(%) 하락하면 익절 처리 [2026-05-06 수정]
     TRAILING_STOP_MIN_PROFIT = 0.0  # 트레일링 스탑 발동 시 최소 보존 수익률 (원금 밑으로 떨어지면 발동 취소) [2026-04-30 추가]
     MIN_SELL_VOLUME_RATIO = 0.2     # 매도 시 최소 거래량 비율 - 유동성 부족 매도 차단 [2026-04-01 추가]
+    LATE_SESSION_TAKE_PROFIT = 0.005 # 장마감 임박 시(14:30~) 완화된 익절 수익률 [2026-05-13 추가]
 
     # ── 손절 필터 ──
     STOP_LOSS_MIN = 0.015           # 최소 손절 비율
@@ -68,6 +69,7 @@ class TradingParams:
             f"MIN_CANDLE_COUNT={cls.MIN_CANDLE_COUNT}",
             f"TAKE_PROFIT_MIN={cls.TAKE_PROFIT_MIN}",
             f"TAKE_PROFIT_FORCE={cls.TAKE_PROFIT_FORCE}",
+            f"LATE_SESSION_TAKE_PROFIT={cls.LATE_SESSION_TAKE_PROFIT}",
             f"TRAILING_STOP_TRIGGER={cls.TRAILING_STOP_TRIGGER}",
             f"TRAILING_STOP_DROP={cls.TRAILING_STOP_DROP}",
             f"TRAILING_STOP_MIN_PROFIT={cls.TRAILING_STOP_MIN_PROFIT}",

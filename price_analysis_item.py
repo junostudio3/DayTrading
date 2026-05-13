@@ -428,6 +428,13 @@ class PriceAnalysisItem:
             # 강제 익절 수익률 이상이면 바로 판매 추천
             return True, f"강제익절 (수익률 {profit_rate * 100:.2f}%)"
 
+        # [2026-05-13 추가] 장마감 임박(14:30 이후) 시에는 이익 중이면(기대수익 하향) 매도 대피
+        local_time = time.localtime()
+        is_late_session = (local_time.tm_hour == 14 and local_time.tm_min >= 30)
+        
+        if is_late_session and profit_rate >= TradingParams.LATE_SESSION_TAKE_PROFIT:
+            return True, f"장마감임박 익절 (수익률 {profit_rate * 100:.2f}%)"
+
         # [2026-04-29 추가] 트레일링 스탑 (수익 보존)
         max_high = 0.0
         # buy_time이 있으면 그 이후의 캔들만, 없으면 최근 12개(1시간) 캔들 검사
