@@ -9,6 +9,8 @@ from trade_step import TradeStep
 from typing import List
 from typing import Optional
 
+import json
+import os
 import time
 
 
@@ -44,8 +46,6 @@ class TradeBotDaily:
         self.update_sell_list()
 
     def _load_bot_purchases(self):
-        import json
-        import os
         if os.path.exists(self.bot_purchases_path):
             try:
                 with open(self.bot_purchases_path, "r") as f:
@@ -55,8 +55,6 @@ class TradeBotDaily:
                 self.log(f"봇 구매 내역 로드 중 오류 발생: {e}")
 
     def _save_bot_purchases(self):
-        import json
-        import os
         try:
             os.makedirs(os.path.dirname(self.bot_purchases_path), exist_ok=True)
             with open(self.bot_purchases_path, "w") as f:
