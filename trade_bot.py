@@ -57,7 +57,8 @@ class TradeBot:
         for user in self.user_manager.users:
             try:
                 self.daily.add_bot(self, user)
-                self.swing.add_bot(self, user)
+                if user.use_swing_bot:
+                    self.swing.add_bot(self, user)
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
@@ -85,6 +86,7 @@ class TradeBot:
                         user_data["secret"],
                         user_data["account"],
                         is_virtual,
+                        user_data["use_swing_bot"],
                         self.log)
                     
                     is_valid = True
@@ -351,6 +353,8 @@ class TradeBot:
         if self.daily.watchlist.update_stock(pdno, name, price, volume):
             for bot in self.daily.bots.values():
                 bot.update_sell_list()
+
+        self.swing.check_stock(symbol_item)
 
         if self.swing.watchlist.update_stock(pdno, name, price, volume):
             for swing_bot in self.swing.bots.values():

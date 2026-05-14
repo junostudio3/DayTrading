@@ -1,4 +1,5 @@
 from api.kis_user import KisUser
+from common_structure import SymbolItem
 from trade_bot_swing import TradeBotSwing
 from swing_watchlist import SwingWatchlist
 
@@ -13,6 +14,9 @@ class TradeBotSwingComm:
     def add_bot(self, parent, user: KisUser):
         bot = TradeBotSwing(parent, user)
         self.bots[user.app_id] = bot
+
+    def check_stock(self, item: SymbolItem):
+        pass # 아직 작업되지 않음
 
     def manual_buy(self, app_id: str, pdno: str, quantity: int):
         bot = self.bots.get(app_id)
@@ -39,7 +43,7 @@ class TradeBotSwingComm:
 
         bot = self.bots.get(app_id)
         if bot:
-            bot.process_once(now)
+            bot.process_once(now, self.check_stock)
 
     def set_logger(self, log):
         for bot in self.bots.values():

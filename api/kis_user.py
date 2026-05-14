@@ -2,12 +2,13 @@ from api.kis_auth import KisAuth
 import time
 
 class KisUser:
-    def __init__(self, id, key, secret, account, is_virtual, log):
+    def __init__(self, id, key, secret, account, is_virtual, use_swing_bot, log):
         self.app_id = f"{id}-{account}"
         self.app_key = key
         self.app_secret = secret
         self.app_account = account
         self.app_is_virtual = is_virtual
+        self.use_swing_bot = use_swing_bot
         self.log = log
 
         if self.app_is_virtual:

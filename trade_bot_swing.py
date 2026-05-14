@@ -12,6 +12,7 @@ class TradeBotSwing:
         self.parent = parent
         self.log = parent.log
         self.trade_log = parent.trade_log
+        self.user = user
         self.auth = user.auth
         self.app_id = user.app_id
 
@@ -29,7 +30,7 @@ class TradeBotSwing:
         self.trade_log = log
 
     def update_account(self, retry_count: int = 5):
-        return self.auth.update_account(retry_count)
+        return self.user.update_account(retry_count)
 
     def record_account_history(self):
         pass
@@ -114,7 +115,7 @@ class TradeBotSwing:
         symbol_item = self.parent.price_analysis.items[pdno].symbol_item
         price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
-        result = self.auth.order_cash_buy(symbol_item.pdno, quantity, price)
+        result = self.auth.order.buy_order_cash(symbol_item.pdno, quantity, price)
         self.update_account()
         return result
 
@@ -125,7 +126,7 @@ class TradeBotSwing:
         symbol_item = self.parent.price_analysis.items[pdno].symbol_item
         price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
-        result = self.auth.order_cash_sell(symbol_item.pdno, quantity, price)
+        result = self.auth.order.sell_order_cash(symbol_item.pdno, quantity, price)
         self.update_account()
         self.update_monitoring_list()
         return result
