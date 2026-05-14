@@ -251,10 +251,7 @@ class TradeBot:
 
         self.is_running = True
 
-        bot = self.daily.bots.get(app_id)
-        if bot:
-            bot.process_once(now)
-        
+        self.daily.process_once(app_id, now)
         self.swing.process_once(app_id, now)
 
     def is_market_open(self, now: Optional[float] = None) -> bool:

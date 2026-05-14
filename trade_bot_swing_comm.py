@@ -16,6 +16,9 @@ class TradeBotSwingComm:
         self.bots[user.app_id] = bot
 
     def check_stock(self, item: SymbolItem):
+        if self.watchlist.is_existing(item.pdno):
+            # 이미 모니터링 종목이므로 넘어감
+            return True
         pass # 아직 작업되지 않음
 
     def manual_buy(self, app_id: str, pdno: str, quantity: int):

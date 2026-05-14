@@ -98,6 +98,9 @@ class SwingWatchlist:
         if len(self.items) != before:
             self.save()
 
+    def is_existing(self, pdno: str) -> bool:
+        return any(item.stock.pdno == pdno for item in self.items)
+
     def is_avoided(self, pdno: str, name: str, price: int = 0, volume: int = 0) -> bool:
         if SymbolFilter.is_not_watched_by_name(name):
             return True
