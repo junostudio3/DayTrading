@@ -123,8 +123,10 @@ class MarketDataService:
             "fid_input_iscd": pdno
         }
 
+        tr_id = "FHKST01010100" if self.auth.is_virtual else "FHKST01010100"
+
         response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-price-volume",
-                                     "FHKST01010300", # 국내 주식 현재가 및 누적 거래량 조회 트랜잭션 ID
+                                     tr_id, # 국내 주식 현재가 및 누적 거래량 조회 트랜잭션 ID
                                      params=params)
 
         if response.status_code == 200:
