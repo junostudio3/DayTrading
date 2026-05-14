@@ -1,8 +1,5 @@
-import time
 from typing import Optional
-from filter import TradingParams
 from common_structure import SymbolItem
-from trade_reporter import TradeReporter
 from telegram import Telegram
 from api.kis_user import KisUser
 
@@ -17,7 +14,6 @@ class TradeBotSwing:
         self.app_id = user.app_id
 
         self.loop_count = 0
-        self.notified_buy_candidates = set()
         self.notified_sell_candidates = set()
         self.monitor_list: list[SymbolItem] = []
 
@@ -67,6 +63,7 @@ class TradeBotSwing:
     def process_once(self, now: float):
         self.loop_count += 1
         
+        self.update_monitoring_list()
         # 주기적으로 체결 잔고 동기화 (단타봇과 동일하거나 생략 가능, 단타봇이 해주므로)
         for symbol_item in self.monitor_list:
             self._process_step_judge(symbol_item, now)
@@ -89,7 +86,7 @@ class TradeBotSwing:
             return
 
         # 30일 이평선
-        avg_30d = self.parent._market_data_service.get_average_price_30day(pdno)
+        avg_30d = self.parent.market_data_service.get_average_price_30day(pdno)
         if avg_30d is None or avg_30d <= 0:
             return
 
@@ -108,14 +105,6 @@ class TradeBotSwing:
                     msg = f"📈 [Swing 매도 권장] {symbol_item.prdt_name}({pdno})\n현재가({current_price})가 구매 당시보다 10%이상 상승 했습니다."
                     Telegram.send_message(msg)
                     self.notified_sell_candidates.add(pdno)
-
-        else:
-            # 매수 후보 발굴 모니터링
-            if current_price > avg_30d:
-                if pdno not in self.notified_buy_candidates:
-                    msg = f"📈 [Swing 매수 후보] {symbol_item.prdt_name}({pdno})\n현재가({current_price})가 30일 평균가({avg_30d})를 돌파했습니다."
-                    Telegram.send_message(msg)
-                    self.notified_buy_candidates.add(pdno)
 
     def place_manual_buy(self, pdno: str, quantity: int, input_price: int = None):
         if quantity <= 0:
@@ -141,10 +130,7 @@ class TradeBotSwing:
         else:
             price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
-        result = self.auth.order.sell_order_cash(symbol_item.pdno, quantity, price)
-        self.update_account()
-        self.update_monitoring_list()
-        return result
+        return self.auth.order.sell_order_cash(symbol_item.pdno, quantity, price)
 
     def get_dashboard_snapshot(self) -> Optional[dict]:
         pdno_to_name = {}

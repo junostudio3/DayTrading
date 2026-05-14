@@ -30,8 +30,8 @@ class TradeBot:
         self.trade_log = None
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis/")
-        self.daily = TradeBotDailyComm()
-        self.swing = TradeBotSwingComm()
+        self.daily = TradeBotDailyComm(self)
+        self.swing = TradeBotSwingComm(self)
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
         self.valid_pdno_set: set[str] = set()
@@ -52,13 +52,13 @@ class TradeBot:
             raise ValueError("사용자 정보가 없습니다. KisKey.json 파일을 확인해주세요.")
         else:
             # 가격 조회 서비스 초기화
-            self._market_data_service = MarketDataService(self.user_manager.users[0].auth)
+            self.market_data_service = MarketDataService(self.user_manager.users[0].auth)
 
         for user in self.user_manager.users:
             try:
-                self.daily.add_bot(self, user)
+                self.daily.add_bot(user)
                 if user.use_swing_bot:
-                    self.swing.add_bot(self, user)
+                    self.swing.add_bot(user)
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
@@ -332,7 +332,7 @@ class TradeBot:
 
         try:
             # 관심 종목의 전일 종가와 거래량을 조회하여 관심 종목 리스트를 업데이트한다.
-            price, volume = self._market_data_service.get_previous_day_price_and_volume(pdno)
+            price, volume = self.market_data_service.get_previous_day_price_and_volume(pdno)
 
             if price is None or volume is None:
                 return
@@ -353,10 +353,6 @@ class TradeBot:
 
         self.swing.check_stock(symbol_item)
 
-        if self.swing.watchlist.update_stock(pdno, name, price, volume):
-            for swing_bot in self.swing.bots.values():
-                swing_bot.update_monitoring_list()
-
     def _update_market_data(self, now: float):
         # 모든 봇의 모니터링 리스트에서 중복을 제거한 관심 종목을 추출
         # 이것들의 현재가를 업데이트한다. 업데이트된 가격은 price_analysis에 저장된다.
@@ -371,12 +367,12 @@ class TradeBot:
         if getattr(self, '_last_market_index_tick_time', 0.0) + 10 <= now:
             self._last_market_index_tick_time = now
             try:
-                if getattr(self._market_data_service.auth, 'is_virtual', False):
+                if getattr(self.market_data_service.auth, 'is_virtual', False):
                     # 모의투자 환경에서는 시장 지수 조회 API를 미지원하므로 필터 기능 생략
                     self.market_index_kosdaq = 0.0
                     self.market_index_kosdaq_drop_rate = 0.0
                 else:
-                    kosdaq_val, kosdaq_rate = self._market_data_service.get_market_index(is_kosdaq=True)
+                    kosdaq_val, kosdaq_rate = self.market_data_service.get_market_index(is_kosdaq=True)
                     self.market_index_kosdaq = kosdaq_val
                     self.market_index_kosdaq_drop_rate = kosdaq_rate
                     
@@ -416,7 +412,7 @@ class TradeBot:
                 hour = current_time.tm_hour
                 minute = current_time.tm_min
                     
-                candle = self._market_data_service.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
+                candle = self.market_data_service.get_one_minute_candlestick(symbol_item.pdno, hour, minute)
                 # candle 데이터중 첫번째 (가장 최근 데이터)의 현재가와 체결량을 가져온다.)
                 if candle is None:
                     raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")

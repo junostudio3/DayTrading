@@ -3,14 +3,15 @@ from trade_bot_daily import TradeBotDaily
 from watchlist import Watchlist
 
 class TradeBotDailyComm:
-    def __init__(self):
+    def __init__(self, parent):
+        self.parent = parent
         self.watchlist = Watchlist("./cache/watchlist.json")
         self.bots: dict[str, TradeBotDaily] = {}
         # app_id 별로 봇이 몇 번 프로세스에 진입했는지 카운트하는 딕셔너리
         self.process_counters: dict[str, int] = {}
 
-    def add_bot(self, parent, user: KisUser):
-        bot = TradeBotDaily(parent, user)
+    def add_bot(self, user: KisUser):
+        bot = TradeBotDaily(self.parent, user)
         self.bots[user.app_id] = bot
     
     def set_logger(self, log):
