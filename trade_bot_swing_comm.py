@@ -43,7 +43,7 @@ class TradeBotSwingComm:
 
         bot = self.bots.get(app_id)
         if bot:
-            bot.process_once(now, self.check_stock)
+            bot.process_once(now)
 
     def set_logger(self, log):
         for bot in self.bots.values():
