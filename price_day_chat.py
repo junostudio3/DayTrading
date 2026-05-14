@@ -12,16 +12,6 @@ import pymysql
 import time
 
 
-class PriceDayCandle:
-    def __init__(self):
-        self.date:str = "" # 날짜 (YYYY-MM-DD)
-        self.stck_oprc = 0.0 # 시가
-        self.stck_hgpr = 0.0 # 고가
-        self.stck_lwpr = 0.0 # 저가
-        self.stck_clpr = 0.0 # 종가
-        self.acml_vol = 0 # 누적 거래량
-
-
 class PriceDayChat:
     def __init__(self, market_data_service: MarketDataService):
         self.market_data_service = market_data_service
@@ -55,68 +45,13 @@ class PriceDayChat:
         except Exception as e:
             print(f"DB 테이블 생성 실패: {e}")
 
-    def collect(self, pdno: str, now: float) -> list[PriceDayCandle]:
-        items = self._get_data(pdno, now)
-        if items is not None:
-            return items
-
-        items: list[PriceDayCandle] = []
-        # 최근 100일간의 일간 차트 가격을 조회한다.
-        end_date = time.strftime("%Y%m%d", time.localtime(now))
-        start_date = time.strftime("%Y%m%d", time.localtime(now - 100 * 24 * 3600))
-
-        daily_item_chart_price = self.market_data_service.get_daily_item_chart_price(pdno, start_date, end_date)
-        for day_data in daily_item_chart_price:
-            candle = PriceDayCandle()
-            candle.date = day_data.get("date", "")
-            candle.stck_oprc = float(day_data.get("stck_oprc", "0"))
-            candle.stck_hgpr = float(day_data.get("stck_hgpr", "0"))
-            candle.stck_lwpr = float(day_data.get("stck_lwpr", "0"))
-            candle.stck_clpr = float(day_data.get("stck_clpr", "0"))
-            candle.acml_vol = int(day_data.get("acml_vol", "0"))
-            items.append(candle)
-
+    def get_avg_stck_clpr(self, pdno: str, now: float, days: int) -> float:
+        if not self.prepare_data(pdno, now):
+            return 0.0
+        
         try:
-            # DB에 조회한 데이터를 저장한다 (업데이트 또는 삽입)
-            connection = pymysql.connect(
-                    host=mysql_host,
-                    port=mysql_port,
-                    user=mysql_user,
-                    password=mysql_password,
-                    database=mysql_database,
-                    cursorclass=pymysql.cursors.DictCursor
-                )
-            with connection:
-                with connection.cursor() as cursor:
-                    for item in items:
-                        stck_oprc = float(item.stck_oprc)
-                        stck_hgpr = float(item.stck_hgpr)
-                        stck_lwpr = float(item.stck_lwpr)
-                        stck_clpr = float(item.stck_clpr)
-                        acml_vol = int(item.acml_vol)
-
-                        sql = """
-                            INSERT INTO `pulsetrade.daycandle` (pdno, date, stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                            ON DUPLICATE KEY UPDATE
-                                stck_oprc=VALUES(stck_oprc),
-                                stck_hgpr=VALUES(stck_hgpr),
-                                stck_lwpr=VALUES(stck_lwpr),
-                                stck_clpr=VALUES(stck_clpr),
-                                acml_vol=VALUES(acml_vol)
-                        """
-                        cursor.execute(sql, (pdno, item.date, stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol))
-                connection.commit()
-        except Exception as e:
-            print(f"DB 저장 실패: {e}")
-
-        return items
-
-    def _get_data(self, pdno: str, now: float) -> list[PriceDayCandle]:
-        end_date = time.strftime("%Y%m%d", time.localtime(now))
-        start_date = time.strftime("%Y%m%d", time.localtime(now - 100 * 24 * 3600))
-        # DB에서 조회해본다
-        try:
+            # 여기까지 왔을 때는 now 기준의 데이터는 DB에 준비되어 있어야 한다.
+            # now 가 과거 특정 날짜이거나 미래일자의 데이터가 있는 것은 고려하지 않고, 실시간 운영 용도로만 사용한다고 가정한다.
             connection = pymysql.connect(
                 host=mysql_host,
                 port=mysql_port,
@@ -126,32 +61,76 @@ class PriceDayChat:
                 cursorclass=pymysql.cursors.DictCursor
             )
             with connection:
+                # days 만큼의 데이터가 있는지 확인한다
+                # 날짜 체크는 필요없으므로 데이터수만 체크한다.
                 with connection.cursor() as cursor:
-                    sql = "SELECT date, stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol FROM `pulsetrade.daycandle` WHERE pdno=%s AND date >= %s AND date <= %s ORDER BY date DESC"
-                    cursor.execute(sql, (pdno, start_date, end_date))
-                    rows = cursor.fetchall()
-                    
-                    # 얻은 마지막 날짜가 end_date와 같거나 더 최신이면 DB에 100일치 데이터가 모두 있는 것으로 간주한다.
-                    if len(rows) == 0:
-                        return None
-                    last_date_in_db = rows[0].get("date")
-                    if last_date_in_db is None or last_date_in_db.strftime("%Y%m%d") < end_date:
-                        return None
-
-                    # DB에 100일치 데이터가 모두 있는 경우 DB에서 조회한 데이터를 반환한다.
-                    items: list[PriceDayCandle] = []
-                    for row in rows:
-                        candle = PriceDayCandle()
-                        candle.date = row['date'].strftime("%Y-%m-%d")
-                        candle.stck_oprc = row['stck_oprc']
-                        candle.stck_hgpr = row['stck_hgpr']
-                        candle.stck_lwpr = row['stck_lwpr']
-                        candle.stck_clpr = row['stck_clpr']
-                        candle.acml_vol = row['acml_vol']
-                        items.append(candle)
-                    return items
+                    sql = "SELECT COUNT(*) AS count FROM `pulsetrade.daycandle` WHERE pdno=%s"
+                    cursor.execute(sql, (pdno,))
+                    result = cursor.fetchone()
+                    if result is None or result.get("count", 0) < days:
+                        return 0.0
+                # days 만큼의 데이터가 있는 경우 stck_clpr의 평균을 계산해서 반환한다.
+                with connection.cursor() as cursor:
+                    sql = "SELECT AVG(stck_clpr) AS avg_clpr FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT %s) AS subquery"
+                    cursor.execute(sql, (pdno, days))
+                    result = cursor.fetchone()
+                    if result and result.get("avg_clpr") is not None:
+                        return float(result["avg_clpr"])
         except Exception as e:
-            return None
+            print(f"DB에서 평균 종가 조회 실패: {e}")
+        return 0.0
+
+    def prepare_data(self, pdno: str, now: float) -> bool:
+        try:
+            connection = pymysql.connect(
+                    host=mysql_host,
+                    port=mysql_port,
+                    user=mysql_user,
+                    password=mysql_password,
+                    database=mysql_database,
+                    cursorclass=pymysql.cursors.DictCursor
+                )
+            with connection:
+                # 오늘자 데이터가 있는지 확인한다
+                end_date = time.strftime("%Y%m%d", time.localtime(now))
+                start_date = time.strftime("%Y%m%d", time.localtime(now - 100 * 24 * 3600))
+                with connection.cursor() as cursor:
+                    today_date = end_date
+                    sql = "SELECT COUNT(*) AS count FROM `pulsetrade.daycandle` WHERE pdno=%s AND date=%s"
+                    cursor.execute(sql, (pdno, today_date))
+                    result = cursor.fetchone()
+                    if result and result.get("count", 0) > 0:
+                        # 오늘자 데이터가 이미 존재하므로 준비 완료
+                        return True
+                
+                # 오늘자 데이터가 없으므로 데이터를 수집해서 DB에 저장한다
+                daily_item_chart_price = self.market_data_service.get_daily_item_chart_price(pdno, start_date, end_date)
+                if daily_item_chart_price is None or len(daily_item_chart_price) == 0:
+                    return False
+                for day_data in daily_item_chart_price:
+
+                    stck_oprc = float(day_data.get("stck_oprc", "0"))
+                    stck_hgpr = float(day_data.get("stck_hgpr", "0"))
+                    stck_lwpr = float(day_data.get("stck_lwpr", "0"))
+                    stck_clpr = float(day_data.get("stck_clpr", "0"))
+                    acml_vol = int(day_data.get("acml_vol", "0"))
+                    sql = """
+                        INSERT INTO `pulsetrade.daycandle` (pdno, date, stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            stck_oprc=VALUES(stck_oprc),
+                            stck_hgpr=VALUES(stck_hgpr),
+                            stck_lwpr=VALUES(stck_lwpr),
+                            stck_clpr=VALUES(stck_clpr),
+                            acml_vol=VALUES(acml_vol)
+                    """
+                    with connection.cursor() as cursor:
+                        cursor.execute(sql, (pdno, day_data.get("date", ""), stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol))
+                connection.commit()
+                return True
+        except Exception as e:
+            print(f"DB 데이터 준비 실패: {e}")
+        return False
 
 
 class PriceDayChatUpdater:
@@ -172,7 +151,7 @@ class PriceDayChatUpdater:
         name = getattr(record, 'hts_kor_isnm', '')
         print(f"업데이트 대상 종목: {pdno} ({name})")
 
-        self.price_day_chat.collect(pdno, time.time())
+        self.price_day_chat.prepare_data(pdno, time.time())
         self.update_item_index += 1
 
         if self.update_item_index >= len(self.all_valid_records):

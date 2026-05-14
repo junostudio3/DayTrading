@@ -32,14 +32,9 @@ class TradeBotSwingComm:
             # 이름 필터에 걸리는 종목이므로 넘어감
             return
         
-        day_candles = self.price_day_chat.collect(item.pdno, time.time())
-        if day_candles is None or len(day_candles) < 30:
-            # 30일치 일봉이 없는 종목은 모니터링에서 제외
-            return
-        
-        # 30일 이평선 계산 (단순히 30일치 종가의 평균으로 계산)
-        avg_30d = sum(c.stck_clpr for c in day_candles[:30]) / 30
+        avg_30d = self.price_day_chat.get_avg_stck_clpr(item.pdno, time.time(), 30)
         if avg_30d is None or avg_30d <= 0:
+            # 30일치 일봉이 없는 종목은 모니터링에서 제외
             return
 
         for retry in range(3):
