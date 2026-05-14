@@ -2,6 +2,7 @@ from api.info_kosdaq import load_kosdaq_master
 from api.info_kospi import load_kospi_master
 from api.kis_user import KisAuth, KisUserManager, KisUser
 from api.market_data_service import MarketDataService
+from common_structure import SwingIndicator
 from KisKey import mysql_host
 from KisKey import mysql_port
 from KisKey import mysql_user
@@ -79,6 +80,51 @@ class PriceDayChat:
         except Exception as e:
             print(f"DB에서 평균 종가 조회 실패: {e}")
         return 0.0
+
+    def get_swing_indicators(self, pdno: str, now: float) -> SwingIndicator:
+        """
+        한 번의 쿼리로 5이평, 20이평, 30이평, 최근 5일 평균 거래량 등을 구해 반환합니다.
+        """
+        result_ind = SwingIndicator(valid=False)
+
+        if not self.prepare_data(pdno, now):
+            return result_ind
+        
+        try:
+            connection = pymysql.connect(
+                host=mysql_host, port=mysql_port, user=mysql_user,
+                password=mysql_password, database=mysql_database,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            with connection:
+                with connection.cursor() as cursor:
+                    # 데이터 개수가 30일 이상인지 확인
+                    sql_check = "SELECT COUNT(*) AS count FROM `pulsetrade.daycandle` WHERE pdno=%s"
+                    cursor.execute(sql_check, (pdno,))
+                    cnt_res = cursor.fetchone()
+                    if cnt_res is None or cnt_res.get("count", 0) < 30:
+                        return result_ind
+
+                    sql = """
+                        SELECT 
+                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 5) as t) as avg_5d,
+                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 20) as t) as avg_20d,
+                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 30) as t) as avg_30d,
+                            (SELECT AVG(acml_vol) FROM (SELECT acml_vol FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 5) as t) as avg_vol_5d
+                    """
+                    cursor.execute(sql, (pdno, pdno, pdno, pdno))
+                    row = cursor.fetchone()
+                    if row:
+                        result_ind.avg_5d = float(row["avg_5d"] or 0)
+                        result_ind.avg_20d = float(row["avg_20d"] or 0)
+                        result_ind.avg_30d = float(row["avg_30d"] or 0)
+                        result_ind.avg_vol_5d = float(row["avg_vol_5d"] or 0)
+                        result_ind.valid = True
+
+        except Exception as e:
+            print(f"DB에서 스윙 지표 조회 실패: {e}")
+            
+        return result_ind
 
     def prepare_data(self, pdno: str, now: float) -> bool:
         try:

@@ -32,9 +32,9 @@ class TradeBotSwingComm:
             # 이름 필터에 걸리는 종목이므로 넘어감
             return
         
-        avg_30d = self.price_day_chat.get_avg_stck_clpr(item.pdno, time.time(), 30)
-        if avg_30d is None or avg_30d <= 0:
-            # 30일치 일봉이 없는 종목은 모니터링에서 제외
+        ind = self.price_day_chat.get_swing_indicators(item.pdno, time.time())
+        if not ind.valid:
+            # 30일치 일봉 등 데이터 부족시 모니터링 제외
             return
 
         for retry in range(3):
@@ -47,10 +47,16 @@ class TradeBotSwingComm:
                     return
         
         # 매수 후보 발굴 모니터링
-        if current_price > avg_30d:
-            # watchlist에 추가
+        is_break_30d = current_price > ind.avg_30d
+        is_trend_up = ind.avg_5d > ind.avg_20d
+        is_volume_burst = current_volume > (ind.avg_vol_5d * 2.0)
+
+        # 3조건 모두 만족 시 추천
+        if is_break_30d and is_trend_up and is_volume_burst:
             if self.watchlist.update_stock(item.pdno, item.prdt_name, current_price, current_volume):
-                msg = f"📈 [Swing 매수 후보] {item.prdt_name}({item.pdno})\n현재가({current_price})가 30일 평균가({avg_30d})를 돌파했습니다."
+                msg = (f"📈 [Swing 추천] {item.prdt_name}({item.pdno})\n"
+                       f"• 현재가: {current_price} 돌파 (5선 {ind.avg_5d:.0f} / 20선 {ind.avg_20d:.0f} / 30선 {ind.avg_30d:.0f})\n"
+                       f"• 조건: 30선 돌파 & 상승 추세 & 거래량 2배 급증")
                 Telegram.send_message(msg)
 
     def manual_buy(self, app_id: str, pdno: str, quantity: int, price: int = None):
