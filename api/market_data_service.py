@@ -119,14 +119,12 @@ class MarketDataService:
         """현재가와 누적 거래량 조회"""
 
         params = {
-            "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
-            "fid_input_iscd": pdno
+            "FID_COND_MRKT_DIV_CODE": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
+            "FID_INPUT_ISCD": pdno
         }
 
-        tr_id = "FHKST01010100" if self.auth.is_virtual else "FHKST01010100"
-
-        response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-price-volume",
-                                     tr_id, # 국내 주식 현재가 및 누적 거래량 조회 트랜잭션 ID
+        response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-price",
+                                     "FHKST01010100", # 국내 주식 현재가 및 누적 거래량 조회 트랜잭션 ID
                                      params=params)
 
         if response.status_code == 200:
@@ -136,9 +134,9 @@ class MarketDataService:
                 volume = int(data["output"]["acml_vol"])
                 return price, volume
             else:
-                raise Exception(f"Failed to get current price and accumulated volume: {data.get('msg_cd')} {data.get('msg1')}")
+                raise Exception(f"Failed to get current price: {data.get('msg_cd')} {data.get('msg1')}")
         else:
-            raise Exception(f"Failed to get current price and accumulated volume: {response.status_code} {response.text}")
+            raise Exception(f"Failed to get current price: {response.status_code} {response.text}")
 
     def get_market_index(self, is_kosdaq: bool = True):
         """시장 지수(KOSPI, KOSDAQ) 현재가 및 등락률(%) 조회
