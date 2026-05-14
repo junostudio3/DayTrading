@@ -1,15 +1,19 @@
 from api.kis_user import KisUser
 from common_structure import SymbolItem
 from filter import SymbolFilter
+from price_day_chat import PriceDayChat
 from trade_bot_swing_watchlist import SwingWatchlist
 from telegram import Telegram
 from trade_bot_swing import TradeBotSwing
+import time
 
 
 class TradeBotSwingComm:
     def __init__(self, parent):
         from trade_bot import TradeBot
         self.parent: TradeBot = parent
+        self.market_data_service = parent.market_data_service
+        self.price_day_chat = PriceDayChat(self.market_data_service)
         self.watchlist = SwingWatchlist("./cache/swing_watchlist.json")
         self.bots: dict[str, TradeBotSwing] = {}
         # app_id 별로 스윙 봇이 몇 번 프로세스에 진입했는지 카운트하는 딕셔너리
@@ -28,13 +32,19 @@ class TradeBotSwingComm:
             # 이름 필터에 걸리는 종목이므로 넘어감
             return
         
-        avg_30d = self.parent.market_data_service.get_average_price_30day(item.pdno)
+        day_candles = self.price_day_chat.collect(item.pdno, time.time())
+        if day_candles is None or len(day_candles) < 30:
+            # 30일치 일봉이 없는 종목은 모니터링에서 제외
+            return
+        
+        # 30일 이평선 계산 (단순히 30일치 종가의 평균으로 계산)
+        avg_30d = sum(c.stck_clpr for c in day_candles[:30]) / 30
         if avg_30d is None or avg_30d <= 0:
             return
 
         for retry in range(3):
             try:
-                current_price, current_volume = self.parent.market_data_service.get_current_price_and_accumulated_volume(item.pdno)
+                current_price, current_volume = self.market_data_service.get_current_price_and_accumulated_volume(item.pdno)
                 break
             except Exception as e:
                 self.parent.log(f"종목 {item.pdno}의 현재가/거래량 조회 실패: {e}")

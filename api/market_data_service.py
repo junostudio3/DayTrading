@@ -7,6 +7,30 @@ class MarketDataService:
     def __init__(self, auth: KisAuth):
         self.auth = auth
 
+    def get_daily_item_chart_price(self, pdno: str, start_date: str, end_date: str):
+        """일간 차트 가격 조회"""
+
+        params = {
+            "fid_cond_mrkt_div_code": "J", # 시장 구분 (예: J:KRX, NX:NXT, UN:통합)
+            "fid_input_iscd": pdno,
+            "fid_input_date_1": start_date, # 조회 시작날짜 (YYYYMMDD)
+            "fid_input_date_2": end_date, # 조회 종료날짜 (YYYYMMDD)
+            "fid_period_div_code": "D", # 기간 분류 코드 (D:일간, W:주간, M:월간)
+            "fid_org_adj_prc": "1", # 수정주가 여부 (0:미수정, 1:수정)
+        }
+
+        response = self.auth.request("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                                     "FHKST03010100", # 국내 주식 일간 차트 가격 조회 트랜잭션 ID
+                                     params=params)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("rt_cd") == "0" and "output2" in data and isinstance(data["output2"], list) and len(data["output2"]) > 0:
+                return data["output2"] # 일간 차트 데이터 리스트 반환
+            raise Exception(f"Failed to get daily item chart price: {data.get('msg_cd')} {data.get('msg1')}")
+        else:
+            raise Exception(f"Failed to get daily item chart price: {response.status_code} {response.text}")
+
     def get_average_price_30day(self, pdno: str):
         """30일 평균가 조회"""
 
