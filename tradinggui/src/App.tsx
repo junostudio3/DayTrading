@@ -34,6 +34,8 @@ interface Snapshot {
   account: Account;
   market_open: boolean;
   loop_count: number;
+  update_elapsed?: number;
+  process_once_elapsed?: number;
   holdings: Holding[];
   watch: WatchItem[];
   swing_watch?: WatchItem[];
@@ -403,7 +405,7 @@ function Dashboard() {
         <div className={`status-summary ${isConnected ? 'connected' : 'disconnected'}`}>
           {isConnected ? (
             <span>
-              {snapshot?.market_open ? '장중' : '장외'} | 루프: {snapshot?.loop_count || 0} | 갱신: {ts} | 
+              {snapshot?.market_open ? '장중' : '장외'} | 루프: {snapshot?.loop_count || 0} ({snapshot?.update_elapsed?.toFixed(2) || '0.00'}s+{snapshot?.process_once_elapsed?.toFixed(2) || '0.00'}s) | 갱신: {ts} | 
               총평가: {account.tot_evlu_amt?.toLocaleString() || 0} | 예수금: {account.cash?.toLocaleString() || 0} | 
               D+1: {account.d1?.toLocaleString() || 0} | D+2: {account.d2?.toLocaleString() || 0}
             </span>

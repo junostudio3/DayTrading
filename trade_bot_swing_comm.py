@@ -32,7 +32,14 @@ class TradeBotSwingComm:
         if avg_30d is None or avg_30d <= 0:
             return
 
-        current_price, current_volume = self.parent.market_data_service.get_current_price_and_accumulated_volume(item.pdno)
+        for retry in range(3):
+            try:
+                current_price, current_volume = self.parent.market_data_service.get_current_price_and_accumulated_volume(item.pdno)
+                break
+            except Exception as e:
+                self.parent.log(f"종목 {item.pdno}의 현재가/거래량 조회 실패: {e}")
+                if retry == 2:
+                    return
         
         # 매수 후보 발굴 모니터링
         if current_price > avg_30d:

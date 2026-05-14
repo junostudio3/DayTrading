@@ -94,13 +94,14 @@ class TradeBotSwing:
             # 매도 권장 모니터링 #1 (다음의 조건 모두 만족 시 매도 권장)
             # : 가격이 30일 이평선 밑으로 떨어지면 알림
             # : 가격이 5% 이상 하락하면 알림
-            if current_price < avg_30d and current_price < inventory['pchs_avg_pric'] * 0.95:
+            pchs_avg_pric: float = float(inventory.get('pchs_avg_pric'))
+            if current_price < avg_30d and current_price < pchs_avg_pric * 0.95:
                 if pdno not in self.notified_sell_candidates:
                     msg = f"📉 [Swing 매도 권장] {symbol_item.prdt_name}({pdno})\n현재가({current_price})가 30일 평균가({avg_30d})를 하회했고 구매 당시보다 5%이상 하락 했습니다."
                     Telegram.send_message(msg)
                     self.notified_sell_candidates.add(pdno)
 
-            if current_price > inventory['pchs_avg_pric'] * 1.10:
+            if current_price > pchs_avg_pric * 1.10:
                 if pdno not in self.notified_sell_candidates:
                     msg = f"📈 [Swing 매도 권장] {symbol_item.prdt_name}({pdno})\n현재가({current_price})가 구매 당시보다 10%이상 상승 했습니다."
                     Telegram.send_message(msg)

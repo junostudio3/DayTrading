@@ -35,6 +35,8 @@ class TradeBot:
         self.price_update_interval_sec = 2.5
         self.last_price_update_at: dict[str, float] = {}
         self.valid_pdno_set: set[str] = set()
+        self.market_data_update_elapsed :float = 0.0 # 마지막 시장 데이터 업데이트에 걸린 시간 (초 단위)
+        self.process_once_elapsed :float = 0.0 # 마지막 process_once 함수 실행에 걸린 시간 (초 단위)
         self.is_running = None
 
         self.snapshot_collect_candidates: list[SymbolItem] = []
@@ -67,6 +69,7 @@ class TradeBot:
         # json_path 경로에 있는 JSON 파일에서 사용자 정보를 읽어와서 user_manager에 추가한다.
         # JSON 파일은 사용자 정보의 리스트 형태로 되어 있어야 한다.
         # 각 사용자 정보는 app_id, api_key, api_secret, account_number, is_virtual 필드를 포함해야 한다.
+        start_time = time.time()
         import json
         if not os.path.exists(json_path):
             self.log(f"사용자 정보 파일이 존재하지 않습니다: {json_path}")
@@ -105,6 +108,8 @@ class TradeBot:
                     self.user_manager.add_user(user)
         except Exception as e:
             self.log(f"사용자 정보 파일을 읽어오는 중 오류가 발생했습니다: {e}")
+        
+        print(f"[{time.time() - start_time:10.2f}초] 총 {len(self.user_manager.users)}명의 사용자가 로드됨.")
 
     def _day_initialize(self, now: float) -> bool:
         local_time = time.localtime(now)
@@ -133,8 +138,12 @@ class TradeBot:
         self.daily_end_logged = False
         self.is_running = None
 
+        elapsed = time.time() - now
+
         if self._is_now_holiday:
             self.log(f"오늘은 {date_str}로 휴일입니다. 봇이 동작하지 않습니다.")
+        
+        print(f"[{elapsed:10.2f}초] 날짜 초기화 작업이 완료됨.")
         return True
 
     def _download_and_extract_master_files(self):
@@ -209,6 +218,8 @@ class TradeBot:
         if getattr(self, '_current_date', None) == None:
             # 현재 날짜 정보가 없으므로 대기한다.
             return
+        
+        start_time = time.time()
 
         '''
         장 시작 여부 확인
@@ -253,6 +264,7 @@ class TradeBot:
 
         self.daily.process_once(app_id, now)
         self.swing.process_once(app_id, now)
+        self.process_once_elapsed = time.time() - start_time
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:
@@ -286,6 +298,9 @@ class TradeBot:
         if bot:
             snapshot = bot.get_dashboard_snapshot()
             if snapshot:
+                snapshot["update_elapsed"] = self.market_data_update_elapsed
+                snapshot["process_once_elapsed"] = self.process_once_elapsed
+                
                 swing_bot = self.swing.bots.get(app_id)
                 if swing_bot:
                     swing_snap = swing_bot.get_dashboard_snapshot()
@@ -354,6 +369,7 @@ class TradeBot:
         self.swing.check_stock(symbol_item)
 
     def _update_market_data(self, now: float):
+        start_time = time.time()
         # 모든 봇의 모니터링 리스트에서 중복을 제거한 관심 종목을 추출
         # 이것들의 현재가를 업데이트한다. 업데이트된 가격은 price_analysis에 저장된다.
 
@@ -389,11 +405,17 @@ class TradeBot:
             for item in bot.monitor_list:
                 if item.pdno not in monitor_dict:
                     monitor_dict[item.pdno] = item
+        for bot in self.swing.bots.values():
+            for item in bot.monitor_list:
+                if item.pdno not in monitor_dict:
+                    monitor_dict[item.pdno] = item
 
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [executor.submit(self._update_price, symbol_item, now) for symbol_item in monitor_dict.values()]
             concurrent.futures.wait(futures)
+            
+        self.market_data_update_elapsed = time.time() - start_time
 
     def _update_price(self, symbol_item: SymbolItem, now: float, force: bool = False):
         """단일 종목의 현재가 조회"""
