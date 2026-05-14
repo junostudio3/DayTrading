@@ -36,7 +36,7 @@ export const fetchSnapshot = async (selectedUser: string) => {
   return res; // We return the raw response because App.tsx checks res.ok
 };
 
-export const submitOrderRequest = async (selectedUser: string, side: string, pdno: string, quantity: number) => {
+export const submitOrderRequest = async (selectedUser: string, side: string, pdno: string, quantity: number, price?: number) => {
   return fetchWithAuth(`${API_BASE_URL}/order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -45,6 +45,7 @@ export const submitOrderRequest = async (selectedUser: string, side: string, pdn
       side,
       pdno,
       quantity,
+      price,
     }),
   });
 };

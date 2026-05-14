@@ -275,11 +275,11 @@ class TradeBot:
             return self.price_analysis.items[pdno]
         return None
 
-    def place_manual_buy(self, app_id: str, pdno: str, quantity: int):
-        self.swing.manual_buy(app_id, pdno, quantity)
+    def place_manual_buy(self, app_id: str, pdno: str, quantity: int, price: int = None):
+        self.swing.manual_buy(app_id, pdno, quantity, price)
         
-    def place_manual_sell(self, app_id: str, pdno: str, quantity: int):
-        self.swing.manual_sell(app_id, pdno, quantity)
+    def place_manual_sell(self, app_id: str, pdno: str, quantity: int, price: int = None):
+        self.swing.manual_sell(app_id, pdno, quantity, price)
 
     def get_dashboard_snapshot(self, app_id: str) -> Optional[dict]:
         bot = self.daily.bots.get(app_id)

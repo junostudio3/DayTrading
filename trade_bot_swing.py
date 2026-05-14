@@ -108,23 +108,29 @@ class TradeBotSwing:
                     Telegram.send_message(msg)
                     self.notified_buy_candidates.add(pdno)
 
-    def place_manual_buy(self, pdno: str, quantity: int):
+    def place_manual_buy(self, pdno: str, quantity: int, input_price: int = None):
         if quantity <= 0:
             raise ValueError("수량은 1 이상이어야 합니다.")
         
         symbol_item = self.parent.price_analysis.items[pdno].symbol_item
-        price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+        if input_price:
+            price = input_price
+        else:
+            price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         result = self.auth.order.buy_order_cash(symbol_item.pdno, quantity, price)
         self.update_account()
         return result
 
-    def place_manual_sell(self, pdno: str, quantity: int):
+    def place_manual_sell(self, pdno: str, quantity: int, input_price: int = None):
         if quantity <= 0:
             raise ValueError("수량은 1 이상이어야 합니다.")
         
         symbol_item = self.parent.price_analysis.items[pdno].symbol_item
-        price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
+        if input_price:
+            price = input_price
+        else:
+            price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         result = self.auth.order.sell_order_cash(symbol_item.pdno, quantity, price)
         self.update_account()

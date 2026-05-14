@@ -27,6 +27,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from typing import Optional
 
 from trade_bot import TradeBot
 from trade_engine import TradeEngine
@@ -114,6 +115,7 @@ class OrderRequest(BaseModel):
     side: str
     pdno: str
     quantity: int
+    price: Optional[int] = None
 
 
 
@@ -189,7 +191,7 @@ async def submit_order(order: OrderRequest):
     if order.side not in ("buy", "sell"):
         raise HTTPException(status_code=400, detail="Invalid side. Must be 'buy' or 'sell'")
     
-    engine.submit_order(app_id=order.app_id, side=order.side, pdno=order.pdno, quantity=order.quantity)
+    engine.submit_order(app_id=order.app_id, side=order.side, pdno=order.pdno, quantity=order.quantity, price=order.price)
     return {"status": "ok", "message": f"{order.side} command submitted for {order.pdno} ({order.quantity})"}
 
 @app.get("/account_history")

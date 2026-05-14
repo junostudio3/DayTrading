@@ -191,6 +191,8 @@ function Dashboard() {
   const [tab, setTab] = useState<'trade_logs' | 'logs' | 'history' | 'profit_history'>('trade_logs');
   const [orderModal, setOrderModal] = useState<{ show: boolean; side: 'buy' | 'sell'; pdno: string | null }>({ show: false, side: 'buy', pdno: null });
   const [orderQty, setOrderQty] = useState<string>('');
+  const [isLimitPrice, setIsLimitPrice] = useState<boolean>(false);
+  const [orderPrice, setOrderPrice] = useState<string>('');
   const tradeLogRef = useRef<HTMLDivElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
 
@@ -244,17 +246,25 @@ function Dashboard() {
   const submitOrder = async () => {
     if (!selectedUser || !orderModal.pdno) return;
     const qty = parseInt(orderQty, 10);
+    const p = isLimitPrice ? parseInt(orderPrice, 10) : undefined;
+
     if (isNaN(qty) || qty <= 0) {
       alert("수량은 1 이상의 숫자여야 합니다.");
       return;
     }
+    if (isLimitPrice && (p === undefined || isNaN(p) || p <= 0)) {
+      alert("가격을 올바르게 입력해주세요.");
+      return;
+    }
 
     try {
-      const res = await submitOrderRequest(selectedUser, orderModal.side, orderModal.pdno, qty);
+      const res = await submitOrderRequest(selectedUser, orderModal.side, orderModal.pdno, qty, p);
       if (res.ok) {
         alert(`${orderModal.side === 'buy' ? '매수' : '매도'} 주문 요청 완료`);
         setOrderModal({ show: false, side: 'buy', pdno: null });
         setOrderQty('');
+        setOrderPrice('');
+        setIsLimitPrice(false);
       } else {
         const text = await res.text();
         alert(`주문 요청 실패: ${text}`);
@@ -462,9 +472,32 @@ function Dashboard() {
               onChange={(e) => setOrderQty(e.target.value)} 
               autoFocus 
             />
+            <div style={{ margin: '15px 0', textAlign: 'left' }}>
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={isLimitPrice} 
+                  onChange={(e) => setIsLimitPrice(e.target.checked)} 
+                />
+                가격 직접 지정
+              </label>
+              {isLimitPrice && (
+                <input 
+                  type="number" 
+                  placeholder="가격 입력 (지정가)" 
+                  value={orderPrice} 
+                  onChange={(e) => setOrderPrice(e.target.value)} 
+                  style={{ marginTop: '10px' }}
+                />
+              )}
+            </div>
             <div className="modal-actions">
               <button className="btn-buy" onClick={submitOrder}>확인</button>
-              <button onClick={() => setOrderModal({ show: false, side: 'buy', pdno: null })}>취소</button>
+              <button onClick={() => {
+                setOrderModal({ show: false, side: 'buy', pdno: null });
+                setOrderPrice('');
+                setIsLimitPrice(false);
+              }}>취소</button>
             </div>
           </div>
         </div>

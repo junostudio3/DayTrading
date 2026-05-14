@@ -21,17 +21,17 @@ class TradeBotSwingComm:
             return True
         pass # 아직 작업되지 않음
 
-    def manual_buy(self, app_id: str, pdno: str, quantity: int):
+    def manual_buy(self, app_id: str, pdno: str, quantity: int, price: int = None):
         bot = self.bots.get(app_id)
         if bot:
-            return bot.place_manual_buy(pdno, quantity)
+            return bot.place_manual_buy(pdno, quantity, price)
         else:
             raise Exception(f"Bot with app_id {app_id} not found")
     
-    def manual_sell(self, app_id: str, pdno: str, quantity: int):
+    def manual_sell(self, app_id: str, pdno: str, quantity: int, price: int = None):
         bot = self.bots.get(app_id)
         if bot:
-            return bot.place_manual_sell(pdno, quantity)
+            return bot.place_manual_sell(pdno, quantity, price)
         else:
             raise Exception(f"Bot with app_id {app_id} not found")
 

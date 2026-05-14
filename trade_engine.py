@@ -40,8 +40,8 @@ class TradeEngine:
     def get_user_ids(self) -> list[str]:
         return self.bot.get_user_app_ids()
 
-    def submit_order(self, app_id: str, side: str, pdno: str, quantity: int):
-        self._order_queue.put({"app_id": app_id, "side": side, "pdno": pdno, "quantity": quantity})
+    def submit_order(self, app_id: str, side: str, pdno: str, quantity: int, price: int = None):
+        self._order_queue.put({"app_id": app_id, "side": side, "pdno": pdno, "quantity": quantity, "price": price})
 
     def get_snapshot(self, app_id: str) -> dict[str, Any]:
         with self._snapshot_lock:
@@ -70,14 +70,17 @@ class TradeEngine:
             side = order.get("side", "")
             pdno = order.get("pdno", "")
             quantity = int(order.get("quantity", 0))
+            price = order.get("price")
 
             try:
                 if side == "buy":
-                    self.bot.place_manual_buy(app_id, pdno, quantity)
-                    self._append_log(f"[{app_id}] 수동 매수 완료: {pdno}, 수량 {quantity}")
+                    self.bot.place_manual_buy(app_id, pdno, quantity, price)
+                    log_msg = f"[{app_id}] 수동 매수 완료: {pdno}, 수량 {quantity}" + (f" 설정가:{price}" if price else "")
+                    self._append_log(log_msg)
                 elif side == "sell":
-                    self.bot.place_manual_sell(app_id, pdno, quantity)
-                    self._append_log(f"[{app_id}] 수동 매도 완료: {pdno}, 수량 {quantity}")
+                    self.bot.place_manual_sell(app_id, pdno, quantity, price)
+                    log_msg = f"[{app_id}] 수동 매도 완료: {pdno}, 수량 {quantity}" + (f" 설정가:{price}" if price else "")
+                    self._append_log(log_msg)
                 else:
                     self._append_log(f"알 수 없는 주문 타입: {side}")
             except Exception as e:
