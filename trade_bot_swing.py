@@ -44,15 +44,6 @@ class TradeBotSwing:
 
     def update_monitoring_list(self):
         new_list = []
-        for stock_pdno in self.auth.account.stocks_by_pdno:
-            if self.parent.daily.is_managing_pdno(self.app_id, stock_pdno):
-                continue  # 단타 봇이 관리하는 종목은 스윙 봇에서 제외
-            
-            stock = self.auth.account.stocks_by_pdno[stock_pdno]
-            name = stock.get("prdt_name", stock_pdno)
-            item = SymbolItem(stock_pdno, name)
-            new_list.append(item)
-
         stocks_list = self.parent.swing.watchlist.get_stocks()
         for watchlist_item in stocks_list:
             if not any(x.pdno == watchlist_item.pdno for x in new_list):
@@ -64,7 +55,8 @@ class TradeBotSwing:
         self.loop_count += 1
         
         self.update_monitoring_list()
-        # 주기적으로 체결 잔고 동기화 (단타봇과 동일하거나 생략 가능, 단타봇이 해주므로)
+
+        # 현재 주기적인 체결 잔고 동기화는 단타봇이 진행하므로 생략
         for symbol_item in self.monitor_list:
             self._process_step_judge(symbol_item, now)
 
@@ -75,9 +67,6 @@ class TradeBotSwing:
         pdno = symbol_item.pdno
         inventory = self._find_inventory(pdno)
 
-        if self.parent.daily.is_managing_pdno(self.app_id, pdno):
-            return  # 데일리 봇 관리 대상은 무시
-
         current_price = None
         if pdno in self.parent.price_analysis.items and self.parent.price_analysis.items[pdno].candle_stick_5minute:
             current_price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
@@ -86,7 +75,16 @@ class TradeBotSwing:
             return
 
         # 30일 이평선
-        avg_30d = self.parent.market_data_service.get_average_price_30day(pdno)
+        avg_30d = None
+        for retry in range(3):
+            try:
+                avg_30d = self.parent.market_data_service.get_average_price_30day(pdno)
+                break
+            except Exception as e:
+                if retry == 2:
+                    self.parent.log(f"종목 {pdno}의 30일 평균가 조회 실패: {e}")
+                    return
+
         if avg_30d is None or avg_30d <= 0:
             return
 
