@@ -171,7 +171,7 @@ class PriceDayChat:
                             acml_vol=VALUES(acml_vol)
                     """
                     with connection.cursor() as cursor:
-                        cursor.execute(sql, (pdno, day_data.get("date", ""), stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol))
+                        cursor.execute(sql, (pdno, day_data.get("stck_bsop_date", ""), stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol))
                 connection.commit()
                 return True
         except Exception as e:
