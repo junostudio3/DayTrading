@@ -32,7 +32,7 @@ class TradeBotSwingComm:
             # 이름 필터에 걸리는 종목이므로 넘어감
             return
         
-        ind = self.price_day_chat.get_swing_indicators(item.pdno, time.time())
+        ind = self.price_day_chat.get_past_swing_indicators(item.pdno, time.time())
         if not ind.valid:
             # 30일치 일봉 등 데이터 부족시 모니터링 제외
             return

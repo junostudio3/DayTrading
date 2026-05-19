@@ -16,6 +16,8 @@ import time
 class PriceDayChat:
     def __init__(self, market_data_service: MarketDataService):
         self.market_data_service = market_data_service
+        # API 트래픽 경감을 위한 메모리 동기화 기록 딕셔너리 (하루 1회만 호출)
+        self.last_sync_date = {}
 
         # DB 테이블이 없으면 생성한다
         try:
@@ -46,50 +48,15 @@ class PriceDayChat:
         except Exception as e:
             print(f"DB 테이블 생성 실패: {e}")
 
-    def get_avg_stck_clpr(self, pdno: str, now: float, days: int) -> float:
-        if not self.prepare_data(pdno, now):
+    def get_past_avg_stck_clpr(self, pdno: str, now: float, days: int) -> float:
+        """
+        [주의] 장중 실시간 갱신되는 오늘자 일봉 캔들은 노이즈(Whipsaw)를 유발하므로
+        지표 계산에서 원천 배제되며 오직 '어제까지의 확정된 데이터'로만 평균을 구합니다.
+        """
+        if not self.prepare_past_data(pdno, now):
             return 0.0
         
-        try:
-            # 여기까지 왔을 때는 now 기준의 데이터는 DB에 준비되어 있어야 한다.
-            # now 가 과거 특정 날짜이거나 미래일자의 데이터가 있는 것은 고려하지 않고, 실시간 운영 용도로만 사용한다고 가정한다.
-            connection = pymysql.connect(
-                host=mysql_host,
-                port=mysql_port,
-                user=mysql_user,
-                password=mysql_password,
-                database=mysql_database,
-                cursorclass=pymysql.cursors.DictCursor
-            )
-            with connection:
-                # days 만큼의 데이터가 있는지 확인한다
-                # 날짜 체크는 필요없으므로 데이터수만 체크한다.
-                with connection.cursor() as cursor:
-                    sql = "SELECT COUNT(*) AS count FROM `pulsetrade.daycandle` WHERE pdno=%s"
-                    cursor.execute(sql, (pdno,))
-                    result = cursor.fetchone()
-                    if result is None or result.get("count", 0) < days:
-                        return 0.0
-                # days 만큼의 데이터가 있는 경우 stck_clpr의 평균을 계산해서 반환한다.
-                with connection.cursor() as cursor:
-                    sql = "SELECT AVG(stck_clpr) AS avg_clpr FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT %s) AS subquery"
-                    cursor.execute(sql, (pdno, days))
-                    result = cursor.fetchone()
-                    if result and result.get("avg_clpr") is not None:
-                        return float(result["avg_clpr"])
-        except Exception as e:
-            print(f"DB에서 평균 종가 조회 실패: {e}")
-        return 0.0
-
-    def get_swing_indicators(self, pdno: str, now: float) -> SwingIndicator:
-        """
-        한 번의 쿼리로 5이평, 20이평, 30이평, 최근 5일 평균 거래량 등을 구해 반환합니다.
-        """
-        result_ind = SwingIndicator(valid=False)
-
-        if not self.prepare_data(pdno, now):
-            return result_ind
-        
+        today_date = time.strftime("%Y%m%d", time.localtime(now))
         try:
             connection = pymysql.connect(
                 host=mysql_host, port=mysql_port, user=mysql_user,
@@ -98,21 +65,55 @@ class PriceDayChat:
             )
             with connection:
                 with connection.cursor() as cursor:
-                    # 데이터 개수가 30일 이상인지 확인
-                    sql_check = "SELECT COUNT(*) AS count FROM `pulsetrade.daycandle` WHERE pdno=%s"
-                    cursor.execute(sql_check, (pdno,))
+                    sql = """
+                        SELECT AVG(stck_clpr) AS avg_clpr 
+                        FROM (
+                            SELECT stck_clpr FROM `pulsetrade.daycandle` 
+                            WHERE pdno=%s AND date < %s 
+                            ORDER BY date DESC LIMIT %s
+                        ) AS subquery
+                    """
+                    cursor.execute(sql, (pdno, today_date, days))
+                    result = cursor.fetchone()
+                    if result and result.get("avg_clpr") is not None:
+                        return float(result["avg_clpr"])
+        except Exception as e:
+            print(f"DB에서 과거 평균 종가 조회 실패: {e}")
+        return 0.0
+
+    def get_past_swing_indicators(self, pdno: str, now: float) -> SwingIndicator:
+        """
+        한 번의 쿼리로 5이평, 20이평, 30이평, 최근 5일 평균 거래량을 구해 반환합니다.
+        [주의] 당일 장중 데이터는 지표 왜곡을 막기 위해 계산에서 배제합니다 (date < today).
+        """
+        result_ind = SwingIndicator(valid=False)
+
+        if not self.prepare_past_data(pdno, now):
+            return result_ind
+        
+        today_date = time.strftime("%Y%m%d", time.localtime(now))
+        try:
+            connection = pymysql.connect(
+                host=mysql_host, port=mysql_port, user=mysql_user,
+                password=mysql_password, database=mysql_database,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            with connection:
+                with connection.cursor() as cursor:
+                    sql_check = "SELECT COUNT(*) AS count FROM `pulsetrade.daycandle` WHERE pdno=%s AND date < %s"
+                    cursor.execute(sql_check, (pdno, today_date))
                     cnt_res = cursor.fetchone()
                     if cnt_res is None or cnt_res.get("count", 0) < 30:
                         return result_ind
 
                     sql = """
                         SELECT 
-                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 5) as t) as avg_5d,
-                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 20) as t) as avg_20d,
-                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 30) as t) as avg_30d,
-                            (SELECT AVG(acml_vol) FROM (SELECT acml_vol FROM `pulsetrade.daycandle` WHERE pdno=%s ORDER BY date DESC LIMIT 5) as t) as avg_vol_5d
+                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s AND date < %s ORDER BY date DESC LIMIT 5) as t) as avg_5d,
+                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s AND date < %s ORDER BY date DESC LIMIT 20) as t) as avg_20d,
+                            (SELECT AVG(stck_clpr) FROM (SELECT stck_clpr FROM `pulsetrade.daycandle` WHERE pdno=%s AND date < %s ORDER BY date DESC LIMIT 30) as t) as avg_30d,
+                            (SELECT AVG(acml_vol) FROM (SELECT acml_vol FROM `pulsetrade.daycandle` WHERE pdno=%s AND date < %s ORDER BY date DESC LIMIT 5) as t) as avg_vol_5d
                     """
-                    cursor.execute(sql, (pdno, pdno, pdno, pdno))
+                    cursor.execute(sql, (pdno, today_date, pdno, today_date, pdno, today_date, pdno, today_date))
                     row = cursor.fetchone()
                     if row:
                         result_ind.avg_5d = float(row["avg_5d"] or 0)
@@ -122,39 +123,35 @@ class PriceDayChat:
                         result_ind.valid = True
 
         except Exception as e:
-            print(f"DB에서 스윙 지표 조회 실패: {e}")
+            print(f"DB에서 과거 스윙 지표 조회 실패: {e}")
             
         return result_ind
 
-    def prepare_data(self, pdno: str, now: float) -> bool:
+    def prepare_past_data(self, pdno: str, now: float) -> bool:
+        """
+        API 트래픽 제한을 방지하기 위해 메모리 변수 기반으로 하루 최대 1번만 과거 데이터를 갱신합니다.
+        """
+        today_date = time.strftime("%Y%m%d", time.localtime(now))
+        
+        # 오늘 이미 동기화했다면 API를 호출하지 않고 스킵 (트래픽 최적화)
+        if self.last_sync_date.get(pdno) == today_date:
+            return True
+
         try:
             connection = pymysql.connect(
-                    host=mysql_host,
-                    port=mysql_port,
-                    user=mysql_user,
-                    password=mysql_password,
-                    database=mysql_database,
+                    host=mysql_host, port=mysql_port, user=mysql_user,
+                    password=mysql_password, database=mysql_database,
                     cursorclass=pymysql.cursors.DictCursor
                 )
             with connection:
-                # 오늘자 데이터가 있는지 확인한다
-                end_date = time.strftime("%Y%m%d", time.localtime(now))
+                # 100일 전 데이터부터 수집
                 start_date = time.strftime("%Y%m%d", time.localtime(now - 100 * 24 * 3600))
-                with connection.cursor() as cursor:
-                    today_date = end_date
-                    sql = "SELECT COUNT(*) AS count FROM `pulsetrade.daycandle` WHERE pdno=%s AND date=%s"
-                    cursor.execute(sql, (pdno, today_date))
-                    result = cursor.fetchone()
-                    if result and result.get("count", 0) > 0:
-                        # 오늘자 데이터가 이미 존재하므로 준비 완료
-                        return True
                 
-                # 오늘자 데이터가 없으므로 데이터를 수집해서 DB에 저장한다
-                daily_item_chart_price = self.market_data_service.get_daily_item_chart_price(pdno, start_date, end_date)
+                daily_item_chart_price = self.market_data_service.get_daily_item_chart_price(pdno, start_date, today_date)
                 if daily_item_chart_price is None or len(daily_item_chart_price) == 0:
                     return False
+                    
                 for day_data in daily_item_chart_price:
-
                     stck_oprc = float(day_data.get("stck_oprc", "0"))
                     stck_hgpr = float(day_data.get("stck_hgpr", "0"))
                     stck_lwpr = float(day_data.get("stck_lwpr", "0"))
@@ -173,6 +170,9 @@ class PriceDayChat:
                     with connection.cursor() as cursor:
                         cursor.execute(sql, (pdno, day_data.get("stck_bsop_date", ""), stck_oprc, stck_hgpr, stck_lwpr, stck_clpr, acml_vol))
                 connection.commit()
+                
+                # 성공 시 동기화 일자 기록
+                self.last_sync_date[pdno] = today_date
                 return True
         except Exception as e:
             print(f"DB 데이터 준비 실패: {e}")
@@ -197,7 +197,7 @@ class PriceDayChatUpdater:
         name = getattr(record, 'hts_kor_isnm', '')
         print(f"업데이트 대상 종목: {pdno} ({name})")
 
-        self.price_day_chat.prepare_data(pdno, time.time())
+        self.price_day_chat.prepare_past_data(pdno, time.time())
         self.update_item_index += 1
 
         if self.update_item_index >= len(self.all_valid_records):
