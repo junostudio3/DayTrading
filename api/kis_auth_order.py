@@ -60,7 +60,8 @@ class KisAuthOrder:
             from api.market_data_service import MarketDataService
             candle = MarketDataService(self.auth).get_one_minute_candlestick(pdno, datetime.datetime.now().hour, datetime.datetime.now().minute)
             if candle:
-                price = int(candle.close_price)
+                # [2026-05-26 수정] 모의투자의 가짜 즉시매도가 급락 시 체결 지연되는 문제를 막기 위해 가격을 5% 확 낮춰 던진다.
+                price = int(candle.close_price * 0.95)
                 division = OrderDivision.SETTLE
             else:
                 raise ValueError("캔들스틱 데이터를 가져오지 못했습니다.")
