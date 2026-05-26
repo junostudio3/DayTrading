@@ -21,11 +21,11 @@ class KisUser:
 
         self.auth = KisAuth(self.app_id, self.app_key, self.app_secret, self.app_account, self.app_is_virtual, self.app_domain)
 
-    def update_account(self, retry_count=-1) -> bool:
+    def update_balance(self, retry_count=-1) -> bool:
         try_count = 0
         while True:
             try:
-                self.auth.account.update()
+                self.auth.portfolio.update_balance()
                 return True
             except Exception as e:
                 if try_count == 0:
@@ -75,7 +75,7 @@ class KisUserManager:
                     
                     is_valid = True
                     while True:
-                        if user.update_account(5):
+                        if user.update_balance(5):
                             break
                         if is_virtual:
                             # 모의투자 때문에 시작을 못하는 것은 좋지 않으므로

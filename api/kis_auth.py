@@ -27,8 +27,8 @@ class KisAuth:
         
         self.token_cache_file = os.path.join(self.cache_dir, "access_token.json")
 
-        from api.kis_auth_account import KisAuthAccount
-        self.account = KisAuthAccount(self, account)
+        from api.kis_auth_portfolio import KisAuthPortfolio
+        self.portfolio = KisAuthPortfolio(self, account)
 
         from api.kis_auth_order import KisAuthOrder
         self.order = KisAuthOrder(self)

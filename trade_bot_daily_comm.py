@@ -46,5 +46,5 @@ class TradeBotDailyComm:
             if self.process_counters[app_id] == 0:
                 # 수동 매수/매도가 있었을 수 있으므로
                 # 20회에 한 번씩 계좌 업데이트를 하자
-                bot.update_account()
+                bot.update_portfolio()
             bot.process_once(now)

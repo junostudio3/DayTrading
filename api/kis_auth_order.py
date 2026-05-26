@@ -78,7 +78,7 @@ class KisAuthOrder:
             url="/uapi/domestic-stock/v1/trading/inquire-daily-ccld",
             tr_id=tr_id,  # 주문 상세 조회 트랜잭션 ID
             params={
-                "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
+                "CANO": self.auth.portfolio.account,  # 계좌번호 체계(8-2)의 앞 8자리
                 "ACNT_PRDT_CD": "01",  # 계좌번호 체계(8-2)의 뒤 2자리
                 "INQR_STRT_DT": today,  # 조회 시작일 (YYYYMMDD)
                 "INQR_END_DT": today,  # 조회 종료일 (YYYYMMDD)
@@ -123,7 +123,7 @@ class KisAuthOrder:
                 "content-type": "application/json; charset=utf-8",
             },
             params={
-                "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
+                "CANO": self.auth.portfolio.account,  # 계좌번호 체계(8-2)의 앞 8자리
                 "ACNT_PRDT_CD": "01",  # 계좌번호 체계(8-2)의 뒤 2자리
                 "KRX_FWDG_ORD_ORGNO": order_no,  # 한국거래소 주문번호 (주문 시 반환되는 주문번호)
                 "ORGN_ODNO": order_no,  # 주문번호
@@ -149,7 +149,7 @@ class KisAuthOrder:
         """현금 매수/매도 주문"""
 
         params = {
-            "CANO": self.auth.account.account,  # 계좌번호 체계(8-2)의 앞 8자리
+            "CANO": self.auth.portfolio.account,  # 계좌번호 체계(8-2)의 앞 8자리
             "ACNT_PRDT_CD": "01",  # 계좌번호 체계(8-2)의 뒤 2자리
             "PDNO": pdno,  # 종목번호
             "ORD_DVSN": division.value,

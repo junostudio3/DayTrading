@@ -2,7 +2,7 @@ from api.kis_auth import KisAuth
 from common_structure import AccountBalance
 
 
-class KisAuthAccount:
+class KisAuthPortfolio:
     def __init__(self, auth: KisAuth, account):
         self.auth = auth
         self.account = account
@@ -17,7 +17,7 @@ class KisAuthAccount:
             if stock.get("pdno", "")
         }
 
-    def update(self):
+    def update_balance(self):
         """계좌 정보 업데이트"""
 
         # 실계좌는 TTTC8434R, 모의계좌는 VTTC8434R
@@ -59,7 +59,7 @@ class KisAuthAccount:
                     if item.get("prvs_rcdl_excc_amt") is not None:
                         self.balance.prvs_rcdl_excc_amt = float(item.get("prvs_rcdl_excc_amt", 0)) # 가수도정산금액
 
-    def update_stock(self):
+    def update_stocks(self):
         """주식 잔고 정보 업데이트"""
         tr_id = "VTTC8434R" if self.auth.is_virtual else "TTTC8434R"
 

@@ -194,7 +194,7 @@ class TradeBotManager:
                 if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
                     # 모든 봇의 계좌 정보를 업데이트하고 기록한다.
                     for bot in self.daily.bots.values():
-                        bot.update_account()
+                        bot.update_portfolio()
                         bot.record_account_history()
                     self.daily_end_logged = True
 
@@ -211,7 +211,7 @@ class TradeBotManager:
             if not self.daily_start_logged:
                 # 장 시작 시점에 모든 봇의 계좌 정보를 업데이트하고 기록한다.
                 for bot in self.daily.bots.values():
-                    bot.update_account()
+                    bot.update_portfolio()
                     bot.record_account_history()
                 self.daily_start_logged = True
 

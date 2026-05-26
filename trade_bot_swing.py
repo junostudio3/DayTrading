@@ -25,18 +25,18 @@ class TradeBotSwing:
     def set_trade_logger(self, log):
         self.trade_log = log
 
-    def update_account(self, retry_count: int = 5):
-        return self.user.update_account(retry_count)
+    def update_balance(self, retry_count: int = 5):
+        return self.user.update_balance(retry_count)
 
     def record_account_history(self):
         pass
 
     def display_account_info(self):
         self.log("Swing 봇 주식 잔고:")
-        if not self.auth.account.stocks:
+        if not self.auth.portfolio.stocks:
             self.log("보유 주식이 없습니다.")
         else:
-            for stock in self.auth.account.stocks:
+            for stock in self.auth.portfolio.stocks:
                 # 단타 봇이 관리하지 않는 종목만
                 if self.parent.daily.is_managing_pdno(self.app_id, stock['pdno']):
                     continue
@@ -61,7 +61,7 @@ class TradeBotSwing:
             self._process_step_judge(symbol_item, now)
 
     def _find_inventory(self, pdno: str):
-        return self.auth.account.stocks_by_pdno.get(pdno)
+        return self.auth.portfolio.stocks_by_pdno.get(pdno)
 
     def _process_step_judge(self, symbol_item: SymbolItem, now: float):
         pdno = symbol_item.pdno
@@ -116,7 +116,7 @@ class TradeBotSwing:
             price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         result = self.auth.order.buy_order_cash(symbol_item.pdno, quantity, price)
-        self.update_account()
+        self.update_balance()
         return result
 
     def place_manual_sell(self, pdno: str, quantity: int, input_price: int = None):

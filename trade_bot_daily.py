@@ -79,18 +79,18 @@ class TradeBotDaily:
         self.trade_log = log
 
     def display_account_info(self):
-        self.log(f"예수금: {self.auth.account.balance.dnca_tot_amt}")
-        self.log(f"D+1 예수금: {self.auth.account.balance.nxdy_excc_amt}")
-        self.log(f"D+2 예수금: {self.auth.account.balance.prvs_rcdl_excc_amt}")
+        self.log(f"예수금: {self.auth.portfolio.balance.dnca_tot_amt}")
+        self.log(f"D+1 예수금: {self.auth.portfolio.balance.nxdy_excc_amt}")
+        self.log(f"D+2 예수금: {self.auth.portfolio.balance.prvs_rcdl_excc_amt}")
         self.log("주식 잔고:")
-        if not self.auth.account.stocks:
+        if not self.auth.portfolio.stocks:
             self.log("보유 주식이 없습니다.")
         else:
-            for stock in self.auth.account.stocks:
+            for stock in self.auth.portfolio.stocks:
                 self.log(f"종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
     def _find_inventory(self, pdno: str):
-        return self.auth.account.stocks_by_pdno.get(pdno)
+        return self.auth.portfolio.stocks_by_pdno.get(pdno)
 
     def _get_trade_state(self, pdno: str) -> TradeState:
         if pdno not in self.pdno_states:
@@ -107,7 +107,7 @@ class TradeBotDaily:
         self.update_sell_list()
         state = self._get_trade_state(pdno)
 
-        # self.auth.account.stocks 내에 현재 심볼이 존재하는지 확인하여 매도 주문 단계로 이동
+        # self.auth.portfolio.stocks 내에 현재 심볼이 존재하는지 확인하여 매도 주문 단계로 이동
         if self._find_inventory(pdno) is not None:
             if pdno in self.bot_purchased_pdnos:
                 state.step = TradeStep.DECIDE_ON_SELL
@@ -175,7 +175,7 @@ class TradeBotDaily:
         if pdno not in self.parent.price_analysis.items or not self.parent.price_analysis.items[pdno].candle_stick_5minute:
             return
 
-        budget = self.auth.account.balance.dnca_tot_amt
+        budget = self.auth.portfolio.balance.dnca_tot_amt
 
         # 수수료를 감안하여 budget에 여유를 둔다. (약 만원 정도 여유를 둔다고 가정)
         # 어차피 비싼 종목은 사지 않게 되어 있으므로 큰 문제가 되지는 않을 것이다.
@@ -185,7 +185,7 @@ class TradeBotDaily:
         budget = min(budget, 2000000)
 
         # 총평가금액 기준으로 한종목에 50% 이상 투자하지 않도록 제한한다.
-        balance = self.auth.account.balance
+        balance = self.auth.portfolio.balance
         tot_evlu_amt = int(balance.tot_evlu_amt)
         if tot_evlu_amt < 1000000:
             # 총평가금액이 100만원 미만인 경우에는 최대 투자 금액을 총평가금액의 50%로 제한한다.
@@ -245,7 +245,7 @@ class TradeBotDaily:
 
         if check_order_result is not None and check_order_result.rmn_qty == 0:
             # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
-            self.update_account()
+            self.update_portfolio()
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.avg_prvs)  # 매수 체결 로그 추가
@@ -258,7 +258,7 @@ class TradeBotDaily:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
                 check_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
                 self.auth.order.cancel_order(state.buy_order_no)
-                self.update_account()
+                self.update_portfolio()
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
@@ -342,7 +342,7 @@ class TradeBotDaily:
             purchase_price = float(inventory['pchs_avg_pric']) if inventory else 0.0
 
             # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
-            self.update_account()
+            self.update_portfolio()
 
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
@@ -363,7 +363,7 @@ class TradeBotDaily:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
                 check_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
                 self.auth.order.cancel_order(state.sell_order_no)
-                self.update_account()
+                self.update_portfolio()
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
@@ -396,7 +396,7 @@ class TradeBotDaily:
             )
             try:
                 with connection.cursor() as cursor:
-                    balance = self.auth.account.balance
+                    balance = self.auth.portfolio.balance
                     tot_evlu_amt = int(balance.tot_evlu_amt)
                     dnca_tot_amt = int(balance.dnca_tot_amt)
                     nxdy_excc_amt = int(balance.nxdy_excc_amt)
@@ -509,7 +509,7 @@ class TradeBotDaily:
             })
 
         holdings_rows = []
-        for stock in self.auth.account.stocks:
+        for stock in self.auth.portfolio.stocks:
             pdno = stock.get('pdno', '')
             quantity = int(stock.get('hldg_qty', 0))
             purchase_price = float(stock.get('pchs_avg_pric', 0))
@@ -534,10 +534,10 @@ class TradeBotDaily:
             "market_open": self.parent.is_market_open(),
             "loop_count": self.loop_count,
             "account": {
-                "tot_evlu_amt": self.auth.account.balance.tot_evlu_amt,
-                "cash": self.auth.account.balance.dnca_tot_amt,
-                "d1": self.auth.account.balance.nxdy_excc_amt,
-                "d2": self.auth.account.balance.prvs_rcdl_excc_amt,
+                "tot_evlu_amt": self.auth.portfolio.balance.tot_evlu_amt,
+                "cash": self.auth.portfolio.balance.dnca_tot_amt,
+                "d1": self.auth.portfolio.balance.nxdy_excc_amt,
+                "d2": self.auth.portfolio.balance.prvs_rcdl_excc_amt,
             },
             "watch": watch_rows,
             "holdings": holdings_rows,
@@ -557,7 +557,7 @@ class TradeBotDaily:
         price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         result = self.buy(symbol_item, quantity, price)
-        self.update_account()
+        self.update_portfolio()
         return result
 
     def place_manual_sell(self, pdno: str, quantity: int):
@@ -572,7 +572,7 @@ class TradeBotDaily:
         symbol_item = self.parent.price_analysis.items[pdno].symbol_item
         price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
-        inventory = self.auth.account.stocks_by_pdno.get(pdno)
+        inventory = self.auth.portfolio.stocks_by_pdno.get(pdno)
         if inventory is None:
             raise ValueError("보유하지 않은 종목입니다.")
 
@@ -584,11 +584,11 @@ class TradeBotDaily:
         if result is None:
             raise ValueError("매도 주문이 실패했습니다.")
 
-        self.update_account()
+        self.update_portfolio()
         return result
 
     def update_sell_list(self):
-        self.update_account()
+        self.update_portfolio()
 
         self.monitor_list: list[SymbolItem] = []
         monitor_pdnos = set()
@@ -599,18 +599,18 @@ class TradeBotDaily:
             monitor_pdnos.add(stock.pdno)
 
         # 재고로 가지고 있는 건 모두 모니터링 리스트에 추가
-        for stock in self.auth.account.stocks:
+        for stock in self.auth.portfolio.stocks:
             pdno = stock.get('pdno', '')
             prdt_name = stock.get('prdt_name', '')
             if pdno not in monitor_pdnos:
                 self.monitor_list.append(SymbolItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
 
-    def update_account(self):
+    def update_portfolio(self):
         try_count = 0
         while True:
             try:
-                self.auth.account.update_stock()
+                self.auth.portfolio.update_stocks()
                 break
             except Exception as e:
                 if try_count >= 5:
@@ -621,7 +621,7 @@ class TradeBotDaily:
         try_count = 0
         while True:
             try:
-                self.auth.account.update()
+                self.auth.portfolio.update_balance()
                 break
             except Exception as e:
                 if try_count >= 5:
@@ -630,7 +630,7 @@ class TradeBotDaily:
                 time.sleep(1)  # 잠시 대기 후 재시도
                 try_count += 1
         
-        self.trade_reporter.set_account_balance(self.auth.account.balance)
+        self.trade_reporter.set_account_balance(self.auth.portfolio.balance)
 
     def buy(self, symbol_item: SymbolItem, quantity: int, price: int):
         """현금 매수 주문"""
