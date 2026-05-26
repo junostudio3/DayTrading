@@ -4,13 +4,14 @@ import time
 
 
 class KisUser:
-    def __init__(self, id, key, secret, account, is_virtual, use_swing_bot, log):
+    def __init__(self, id, key, secret, account, is_virtual, use_swing_bot, use_daily_bot, log):
         self.app_id = f"{id}-{account}"
         self.app_key = key
         self.app_secret = secret
         self.app_account = account
         self.app_is_virtual = is_virtual
         self.use_swing_bot = use_swing_bot
+        self.use_daily_bot = use_daily_bot
         self.log = log
 
         if self.app_is_virtual:
@@ -69,6 +70,7 @@ class KisUserManager:
                         user_data["account"],
                         is_virtual,
                         user_data["use_swing_bot"],
+                        user_data["use_daily_bot"],
                         logger)
                     
                     is_valid = True

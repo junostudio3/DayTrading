@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
-from trade_bot import TradeBot
+from trade_bot_manager import TradeBotManager
 from trade_engine import TradeEngine
 from telegram import Telegram
 
@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
     global bot, engine
     logger.info("Initializing DayTradingBot and TradingEngine...")
     
-    bot = TradeBot()
+    bot = TradeBotManager()
     engine = TradeEngine(bot, interval_seconds=1)
     engine.start()
     logger.info("TradingEngine started.")

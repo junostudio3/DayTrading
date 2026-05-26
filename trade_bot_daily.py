@@ -26,10 +26,11 @@ class TradeState:
 
 class TradeBotDaily:
     def __init__(self, parent, user: KisUser):
-        from trade_bot import TradeBot
-        self.parent: TradeBot = parent
+        from trade_bot_manager import TradeBotManager
+        self.parent: TradeBotManager = parent
         self.log = parent.log
         self.trade_log = parent.trade_log
+        self.user = user
         self.auth = user.auth
         self.app_id = user.app_id
 
@@ -444,6 +445,10 @@ class TradeBotDaily:
             if not pdno:
                 continue
             if pdno in processed_pdnos:
+                continue
+            if self.user.use_daily_bot is False:
+                # 사용자 설정에서 일간 봇 사용 안함으로 되어 있으면 일간 봇이 개입하지 않고 판단 단계에 머무르도록 한다.
+                # 봇 자체를 비활성화하는 것이 좋겠지만 현재 코드가 정리가 되어 있지 않아서 일단은 이렇게 처리한다.
                 continue
             processed_pdnos.add(pdno)
 

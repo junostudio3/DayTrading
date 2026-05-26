@@ -21,7 +21,7 @@ import urllib.request
 import zipfile
 
 
-class TradeBot:
+class TradeBotManager:
     def __init__(self):
         import threading
         self._price_lock = threading.Lock()
@@ -439,7 +439,7 @@ class TradeBot:
 
 
 if __name__ == "__main__":
-    bot = TradeBot()
+    bot = TradeBotManager()
     bot.display_account_info()
     user_app_ids = bot.get_user_app_ids()
 

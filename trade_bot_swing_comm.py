@@ -10,8 +10,8 @@ import time
 
 class TradeBotSwingComm:
     def __init__(self, parent):
-        from trade_bot import TradeBot
-        self.parent: TradeBot = parent
+        from trade_bot_manager import TradeBotManager
+        self.parent: TradeBotManager = parent
         self.market_data_service = parent.market_data_service
         self.price_day_chat = PriceDayChat(self.market_data_service)
         self.watchlist = SwingWatchlist("./cache/swing_watchlist.json")
