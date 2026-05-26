@@ -26,7 +26,7 @@ class TradeBotSwing:
         self.trade_log = log
 
     def update_balance(self, retry_count: int = 5):
-        return self.user.update_balance(retry_count)
+        return self.auth.update_balance(logger=self.log, retry_count=retry_count)
 
     def record_account_history(self):
         pass

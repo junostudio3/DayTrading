@@ -607,29 +607,8 @@ class TradeBotDaily:
                 monitor_pdnos.add(pdno)
 
     def update_portfolio(self):
-        try_count = 0
-        while True:
-            try:
-                self.auth.portfolio.update_stocks()
-                break
-            except Exception as e:
-                if try_count >= 5:
-                    self.log(f"계좌 Stock 정보 업데이트 실패: {e}")
-                    self.auth.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 주문 시 재발급 받도록 한다.
-                time.sleep(1)  # 잠시 대기 후 재시도
-                try_count += 1
-        try_count = 0
-        while True:
-            try:
-                self.auth.portfolio.update_balance()
-                break
-            except Exception as e:
-                if try_count >= 5:
-                    self.log(f"계좌 정보 업데이트 실패: {e}")
-                    self.auth.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 주문 시 재발급 받도록 한다.   
-                time.sleep(1)  # 잠시 대기 후 재시도
-                try_count += 1
-        
+        self.auth.update_stocks(logger=self.log)
+        self.auth.update_balance(logger=self.log)      
         self.trade_reporter.set_account_balance(self.auth.portfolio.balance)
 
     def buy(self, symbol_item: SymbolItem, quantity: int, price: int):
