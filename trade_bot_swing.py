@@ -28,9 +28,6 @@ class TradeBotSwing:
     def update_balance(self, retry_count: int = 5):
         return self.auth.update_balance(logger=self.log, retry_count=retry_count)
 
-    def record_account_history(self):
-        pass
-
     def display_account_info(self):
         self.log("Swing 봇 주식 잔고:")
         if not self.auth.portfolio.stocks:

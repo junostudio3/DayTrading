@@ -89,8 +89,8 @@ class TradeBotManager:
             self.log("공휴일API는 쓸대없는 동작을 방지하기 위한 참고용 정보이므로, API 요청에 실패하더라도 오늘이 휴일이 아닌 것으로 간주하고 봇을 동작시킵니다.")
 
         self._current_date = date_str
-        self.daily_start_logged = False
-        self.daily_end_logged = False
+        self.start_logged = False
+        self.end_logged = False
         self.is_running = None
 
         elapsed = time.time() - now
@@ -191,12 +191,10 @@ class TradeBotManager:
         if not self.is_market_open(now):
             if self.is_running is True:
                 # 장이 열려 있다가 닫힌 경우
-                if not self.daily_end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
+                if not self.end_logged and local_time.tm_hour >= 15 and local_time.tm_min >= 30:
                     # 모든 봇의 계좌 정보를 업데이트하고 기록한다.
-                    for bot in self.daily.bots.values():
-                        bot.update_portfolio()
-                        bot.record_account_history()
-                    self.daily_end_logged = True
+                    self.update_portfolio(record_history=True)
+                    self.end_logged = True
 
                 if local_time.tm_wday >= 5:
                     self.log("장이 쉬는 날입니다. 토요일과 일요일에는 동작하지 않습니다.")
@@ -208,18 +206,89 @@ class TradeBotManager:
 
         if self.is_running is False:
             # 장이 닫혀 있다가 열린 경우 (장 시작)
-            if not self.daily_start_logged:
+            if not self.start_logged:
                 # 장 시작 시점에 모든 봇의 계좌 정보를 업데이트하고 기록한다.
-                for bot in self.daily.bots.values():
-                    bot.update_portfolio()
-                    bot.record_account_history()
-                self.daily_start_logged = True
+                self.update_portfolio(record_history=True)
+                self.start_logged = True
 
         self.is_running = True
 
         self.daily.process_once(app_id, now)
         self.swing.process_once(app_id, now)
         self.process_once_elapsed = time.time() - start_time
+
+    def update_portfolio(self, record_history: bool, user: Optional[KisUser] = None):
+        users_to_update = [user] if user is not None else self.user_manager.users
+        for u in users_to_update:
+            u.auth.update_stocks(logger=self.log)
+            u.auth.update_balance(logger=self.log)
+            if record_history:
+                self.record_account_history(u)
+
+            # self.daily.bots중 user의 봇이 있다면 그 봇의 포트폴리오 정보도 업데이트한다.
+            bot = self.daily.bots.get(u.app_id)
+            if bot:
+                bot.updated_portfolio()
+
+    def record_account_history(self, user: KisUser):
+        try:
+            from KisKey import mysql_host
+            from KisKey import mysql_port
+            from KisKey import mysql_user
+            from KisKey import mysql_password
+            from KisKey import mysql_database
+            import pymysql
+
+            connection = pymysql.connect(
+                host=mysql_host,
+                port=mysql_port,
+                user=mysql_user,
+                password=mysql_password,
+                database=mysql_database,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            try:
+                with connection.cursor() as cursor:
+                    balance = user.auth.portfolio.balance
+                    tot_evlu_amt = int(balance.tot_evlu_amt)
+                    dnca_tot_amt = int(balance.dnca_tot_amt)
+                    nxdy_excc_amt = int(balance.nxdy_excc_amt)
+                    prvs_rcdl_excc_amt = int(balance.prvs_rcdl_excc_amt)
+
+                    # 이전 기록 조회
+                    cursor.execute(
+                        "SELECT tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt "
+                        "FROM `pulsetrade.accounthistory` "
+                        "WHERE app_id = %s ORDER BY time DESC LIMIT 1",
+                        (user.app_id,)
+                    )
+                    last_record = cursor.fetchone()
+
+                    # 마지막 기록과 비교
+                    if last_record:
+                        if (int(last_record['tot_evlu_amt']) == tot_evlu_amt and
+                            int(last_record['dnca_tot_amt']) == dnca_tot_amt and
+                            int(last_record['nxdy_excc_amt']) == nxdy_excc_amt and
+                            int(last_record['prvs_rcdl_excc_amt']) == prvs_rcdl_excc_amt):
+                            return  # 변경된 값이 없으면 저장하지 않음
+
+                    sql = """
+                        INSERT INTO `pulsetrade.accounthistory` 
+                        (app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, time)
+                        VALUES (%s, %s, %s, %s, %s, NOW())
+                    """
+                    cursor.execute(sql, (
+                        user.app_id,
+                        tot_evlu_amt,
+                        dnca_tot_amt,
+                        nxdy_excc_amt,
+                        prvs_rcdl_excc_amt
+                    ))
+                connection.commit()
+            finally:
+                connection.close()
+        except Exception as e:
+            self.log(f"계좌 기록 DB 저장 실패: {e}")
 
     def is_market_open(self, now: Optional[float] = None) -> bool:
         if now is None:

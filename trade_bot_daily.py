@@ -245,7 +245,7 @@ class TradeBotDaily:
 
         if check_order_result is not None and check_order_result.rmn_qty == 0:
             # 잔여수량이 0이면 모두 체결된 것이므로 매도 주문 단계로 이동한다.
-            self.update_portfolio()
+            self.parent.update_portfolio(record_history=False, user=self.user)
             state.buy_order_no = ""
             state.buy_order_requested_at = 0.0
             self.trade_reporter.add(TradeType.BUY_COMPLETED, symbol_item, check_order_result.tot_ccld_qty, check_order_result.avg_prvs)  # 매수 체결 로그 추가
@@ -258,7 +258,7 @@ class TradeBotDaily:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
                 check_result = self.check_order_completed(symbol_item, state.buy_order_no, True)
                 self.auth.order.cancel_order(state.buy_order_no)
-                self.update_portfolio()
+                self.parent.update_portfolio(record_history=False, user=self.user)
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.BUY_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.BUY_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매수 주문 취소 로그 추가
@@ -342,7 +342,7 @@ class TradeBotDaily:
             purchase_price = float(inventory['pchs_avg_pric']) if inventory else 0.0
 
             # 잔여수량이 0이면 모두 체결된 것이므로 매수 주문 단계로 이동한다.
-            self.update_portfolio()
+            self.parent.update_portfolio(record_history=False, user=self.user)
 
             state.sell_order_no = ""
             state.sell_order_requested_at = 0.0
@@ -363,7 +363,7 @@ class TradeBotDaily:
                 # 취소 전에 order_check API로 실제 체결 수량을 조회한다.
                 check_result = self.check_order_completed(symbol_item, state.sell_order_no, False)
                 self.auth.order.cancel_order(state.sell_order_no)
-                self.update_portfolio()
+                self.parent.update_portfolio(record_history=False, user=self.user)
                 filled_quantity = check_result.tot_ccld_qty if check_result else 0
 
                 self.trade_reporter.add(TradeType.SELL_CANCELLED, symbol_item, filled_quantity, 0, f"체결 대기 시간 {TradingParams.SELL_ORDER_TIMEOUT_SECONDS // 60}분 초과")  # 매도 주문 취소 로그 추가
@@ -376,66 +376,6 @@ class TradeBotDaily:
 
     def process_once(self, now):
         self._process_step(now)
-
-    def record_account_history(self):
-        try:
-            from KisKey import mysql_host
-            from KisKey import mysql_port
-            from KisKey import mysql_user
-            from KisKey import mysql_password
-            from KisKey import mysql_database
-            import pymysql
-
-            connection = pymysql.connect(
-                host=mysql_host,
-                port=mysql_port,
-                user=mysql_user,
-                password=mysql_password,
-                database=mysql_database,
-                cursorclass=pymysql.cursors.DictCursor
-            )
-            try:
-                with connection.cursor() as cursor:
-                    balance = self.auth.portfolio.balance
-                    tot_evlu_amt = int(balance.tot_evlu_amt)
-                    dnca_tot_amt = int(balance.dnca_tot_amt)
-                    nxdy_excc_amt = int(balance.nxdy_excc_amt)
-                    prvs_rcdl_excc_amt = int(balance.prvs_rcdl_excc_amt)
-
-                    # 이전 기록 조회
-                    cursor.execute(
-                        "SELECT tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt "
-                        "FROM `pulsetrade.accounthistory` "
-                        "WHERE app_id = %s ORDER BY time DESC LIMIT 1",
-                        (self.app_id,)
-                    )
-                    last_record = cursor.fetchone()
-
-                    # 마지막 기록과 비교
-                    if last_record:
-                        if (int(last_record['tot_evlu_amt']) == tot_evlu_amt and
-                            int(last_record['dnca_tot_amt']) == dnca_tot_amt and
-                            int(last_record['nxdy_excc_amt']) == nxdy_excc_amt and
-                            int(last_record['prvs_rcdl_excc_amt']) == prvs_rcdl_excc_amt):
-                            return  # 변경된 값이 없으면 저장하지 않음
-
-                    sql = """
-                        INSERT INTO `pulsetrade.accounthistory` 
-                        (app_id, tot_evlu_amt, dnca_tot_amt, nxdy_excc_amt, prvs_rcdl_excc_amt, time)
-                        VALUES (%s, %s, %s, %s, %s, NOW())
-                    """
-                    cursor.execute(sql, (
-                        self.app_id,
-                        tot_evlu_amt,
-                        dnca_tot_amt,
-                        nxdy_excc_amt,
-                        prvs_rcdl_excc_amt
-                    ))
-                connection.commit()
-            finally:
-                connection.close()
-        except Exception as e:
-            self.log(f"계좌 기록 DB 저장 실패: {e}")
 
     def _process_step(self, now: float):
         # 종목별 상태머신 동작
@@ -557,7 +497,7 @@ class TradeBotDaily:
         price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
         result = self.buy(symbol_item, quantity, price)
-        self.update_portfolio()
+        self.parent.update_portfolio(record_history=False, user=self.user)
         return result
 
     def place_manual_sell(self, pdno: str, quantity: int):
@@ -584,11 +524,11 @@ class TradeBotDaily:
         if result is None:
             raise ValueError("매도 주문이 실패했습니다.")
 
-        self.update_portfolio()
+        self.parent.update_portfolio(record_history=False, user=self.user)
         return result
 
     def update_sell_list(self):
-        self.update_portfolio()
+        self.parent.update_portfolio(record_history=False, user=self.user)
 
         self.monitor_list: list[SymbolItem] = []
         monitor_pdnos = set()
@@ -606,9 +546,7 @@ class TradeBotDaily:
                 self.monitor_list.append(SymbolItem(pdno, prdt_name))
                 monitor_pdnos.add(pdno)
 
-    def update_portfolio(self):
-        self.auth.update_stocks(logger=self.log)
-        self.auth.update_balance(logger=self.log)      
+    def updated_portfolio(self):
         self.trade_reporter.set_account_balance(self.auth.portfolio.balance)
 
     def buy(self, symbol_item: SymbolItem, quantity: int, price: int):
