@@ -25,6 +25,7 @@ class KisUser:
 class KisUserManager:
     def __init__(self):
         self.users: list[KisUser] = []
+        self.app_id_to_user: dict[str, KisUser] = {}
 
     def load(self, json_path: str, logger = None) -> bool:
         if logger is None:
@@ -79,12 +80,10 @@ class KisUserManager:
 
     def add_user(self, user : KisUser):
         self.users.append(user)
+        self.app_id_to_user[user.app_id] = user
 
     def find_user(self, app_id) -> KisUser:
-        for user in self.users:
-            if user.app_id == app_id:
-                return user
-        return None
+        return self.app_id_to_user.get(app_id)
 
     def set_logger(self, log):
         for user in self.users:

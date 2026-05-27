@@ -66,6 +66,9 @@ class TradeBotManager:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
                 continue
 
+        # app_id 별로 봇이 몇 번 프로세스에 진입했는지 카운트하는 딕셔너리
+        self.process_counters: dict[str, int] = {}
+
     def _day_initialize(self, now: float) -> bool:
         local_time = time.localtime(now)
         date_str = time.strftime("%Y-%m-%d", local_time)
@@ -212,6 +215,15 @@ class TradeBotManager:
                 self.start_logged = True
 
         self.is_running = True
+
+        if app_id not in self.process_counters:
+            self.process_counters[app_id] = 0
+        self.process_counters[app_id] = (self.process_counters[app_id] + 1) % 20
+
+        if self.process_counters[app_id] == 0:
+            # 수동 매수/매도가 있었을 수 있으므로
+            # 20회에 한 번씩 계좌 업데이트를 하자
+            self.update_portfolio(record_history=False, user=self.user_manager.find_user(app_id))
 
         self.daily.process_once(app_id, now)
         self.swing.process_once(app_id, now)
