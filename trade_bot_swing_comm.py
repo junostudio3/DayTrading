@@ -5,6 +5,9 @@ from price_day_chat import PriceDayChat
 from trade_bot_swing_watchlist import SwingWatchlist
 from telegram import Telegram
 from trade_bot_swing import TradeBotSwing
+from google_ai_helper import GoogleAiHelper
+from google_ai_helper import GoogleAiOptions
+from KisKey import google_api_key
 import time
 
 
@@ -12,18 +15,29 @@ class TradeBotSwingComm:
     def __init__(self, parent):
         from trade_bot_manager import TradeBotManager
         self.parent: TradeBotManager = parent
+        self.google_ai_helper = GoogleAiHelper(api_key=google_api_key, options=GoogleAiOptions())
         self.market_data_service = parent.market_data_service
         self.price_day_chat = PriceDayChat(self.market_data_service)
         self.watchlist = SwingWatchlist("./cache/swing_watchlist.json")
         self.bots: dict[str, TradeBotSwing] = {}
         # app_id 별로 스윙 봇이 몇 번 프로세스에 진입했는지 카운트하는 딕셔너리
         self.swing_process_counters: dict[str, int] = {}
+        self._request_ai_comments() # 초기화 시 AI 코멘트 요청부터 한다
 
     def add_bot(self, user: KisUser):
         bot = TradeBotSwing(self.parent, user)
         self.bots[user.app_id] = bot
 
     def check_stock(self, item: SymbolItem):
+        for watch_item in self.watchlist.items:
+            if watch_item.ai_request_id != "":
+                # AI 분석 요청이 된 종목은 결과가 나왔는지 확인한다
+                ai_result = self.google_ai_helper.get_response(watch_item.ai_request_id)
+                if ai_result is not None:
+                    watch_item.ai_comment = ai_result
+                    watch_item.ai_request_id = "" # 결과를 받았으므로 ID 초기화
+                    self.watchlist.save() # AI 코멘트가 업데이트된 종목은 저장한다
+
         if self.watchlist.is_existing(item.pdno):
             # 이미 모니터링 종목이므로 넘어감
             return
@@ -100,3 +114,9 @@ class TradeBotSwingComm:
     def display_account_info(self):
         for bot in self.bots.values():
             bot.display_account_info()
+
+    def _request_ai_comments(self):
+        for watch_item in self.watchlist.items:
+            if watch_item.ai_comment == "":
+                # AI 분석이 아직 안된 종목은 분석 요청부터 한다
+                watch_item.ai_request_id = self.google_ai_helper.request_swing_stack_check(watch_item.stock.prdt_name)
