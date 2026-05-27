@@ -27,6 +27,7 @@ interface WatchItem {
   candles: number;
   volume: number;
   step: string;
+  ai_comment?: string;
 }
 
 interface Snapshot {
@@ -195,6 +196,8 @@ function Dashboard() {
   const [orderQty, setOrderQty] = useState<string>('');
   const [isLimitPrice, setIsLimitPrice] = useState<boolean>(false);
   const [orderPrice, setOrderPrice] = useState<string>('');
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const aiMessageTimeoutRef = useRef<number | null>(null);
   const tradeLogRef = useRef<HTMLDivElement>(null);
   const logsRef = useRef<HTMLDivElement>(null);
 
@@ -276,6 +279,24 @@ function Dashboard() {
     }
   };
 
+  const handleItemSelect = (pdno: string, comment?: string) => {
+    setSelectedPdno(pdno);
+    if (comment) {
+      setAiMessage(comment);
+      if (aiMessageTimeoutRef.current) {
+        clearTimeout(aiMessageTimeoutRef.current);
+      }
+      aiMessageTimeoutRef.current = window.setTimeout(() => {
+        setAiMessage(null);
+      }, 30000); // 30초 유지로 상향 (스크롤해서 읽기 편하도록)
+    } else {
+        setAiMessage(null);
+        if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current);
+        }
+    }
+  };
+
   const account = snapshot?.account || {};
   const ts = snapshot?.timestamp ? new Date(snapshot.timestamp * 1000).toLocaleString() : '';
 
@@ -335,7 +356,7 @@ function Dashboard() {
           </thead>
           <tbody>
             {snapshot?.swing_watch?.map((w) => (
-              <tr key={w.pdno} onClick={() => setSelectedPdno(w.pdno)} className={selectedPdno === w.pdno ? 'selected' : ''}>
+              <tr key={w.pdno} onClick={() => handleItemSelect(w.pdno, w.ai_comment)} className={selectedPdno === w.pdno ? 'selected' : ''}>
                 <td>{w.pdno}</td>
                 <td>{w.name}</td>
                 <td>{w.price?.toLocaleString()}</td>
@@ -369,7 +390,7 @@ function Dashboard() {
           </thead>
           <tbody>
             {snapshot?.watch?.map((w) => (
-              <tr key={w.pdno} onClick={() => setSelectedPdno(w.pdno)} className={selectedPdno === w.pdno ? 'selected' : ''}>
+              <tr key={w.pdno} onClick={() => handleItemSelect(w.pdno, w.ai_comment)} className={selectedPdno === w.pdno ? 'selected' : ''}>
                 <td>{w.pdno}</td>
                 <td>{w.name}</td>
                 <td>{w.price?.toLocaleString()}</td>
@@ -462,6 +483,18 @@ function Dashboard() {
           )}
         </div>
       </div>
+
+      {aiMessage && (
+        <div className="ai-message-overlay" onClick={() => setAiMessage(null)}>
+          <div className="ai-message-content" onClick={(e) => e.stopPropagation()}>
+            <div className="ai-message-header">
+              <span>🤖 종목 분석 코멘트</span>
+              <button className="ai-message-close" onClick={() => setAiMessage(null)}>X</button>
+            </div>
+            <div className="ai-message-text">{aiMessage}</div>
+          </div>
+        </div>
+      )}
 
       {orderModal.show && (
         <div className="modal-overlay">

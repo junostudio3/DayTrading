@@ -14,8 +14,6 @@ class SwingWatchlistItem:
     remaining_time: float 
     last_profit_at: float = 0
     last_loss_at: float = 0
-    ai_comment: str = ""
-    ai_request_id: str = "" # AI 분석 요청 ID (임시 필드, 저장하지는 않음)
 
 
 class SwingWatchlist:
@@ -39,7 +37,6 @@ class SwingWatchlist:
                         remaining_time = item.get("remaining_time", TradingParams.SWINGWATCHLIST_ITEM_EXPIRY_DAYS * 6.5 * 3600)
                         last_profit_at = item.get("last_profit_at", 0)
                         last_loss_at = item.get("last_loss_at", 0)
-                        comment = item.get("comment", "")
                         if self.is_avoided(pdno, prdt_name, price, volume):
                             continue
                         self.items.append(SwingWatchlistItem(
@@ -49,7 +46,6 @@ class SwingWatchlist:
                             remaining_time=remaining_time,
                             last_profit_at=last_profit_at,
                             last_loss_at=last_loss_at,
-                            ai_comment=comment
                         ))
             except Exception as e:
                 print(f"Failed to load watchlist from {self.cache_file_path}: {e}")
@@ -73,7 +69,6 @@ class SwingWatchlist:
                         "remaining_time": item.remaining_time,
                         "last_profit_at": item.last_profit_at,
                         "last_loss_at": item.last_loss_at,
-                        "comment": item.ai_comment
                     }
                     for item in self.items
                 ]

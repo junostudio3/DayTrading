@@ -13,6 +13,7 @@ from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
 from filter import TradingParams
 from trade_bot_daily_comm import TradeBotDailyComm
 from trade_bot_swing_comm import TradeBotSwingComm
+from watchlist_ai_comments import WatchlistAIComments
 
 import io
 import os
@@ -28,6 +29,7 @@ class TradeBotManager:
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
         self.log = print
         self.trade_log = None
+        self.watchlist_ai_comments = WatchlistAIComments("./cache/watchlist_ai_comments.json")
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis/")
         self.price_update_interval_sec = 2.5
@@ -337,11 +339,21 @@ class TradeBotManager:
                 snapshot["update_elapsed"] = self.market_data_update_elapsed
                 snapshot["process_once_elapsed"] = self.process_once_elapsed
                 
-                swing_bot = self.swing.bots.get(app_id)
-                if swing_bot:
-                    swing_snap = swing_bot.get_dashboard_snapshot()
-                    if swing_snap and "swing_watch" in swing_snap:
+                swing_snap = self.swing.get_dashboard_snapshot(app_id)
+                if swing_snap:
+                    if "swing_watch" in swing_snap:
                         snapshot["swing_watch"] = swing_snap["swing_watch"]
+
+                # AI 코멘트 정보 추가
+                for key in ["watch", "swing_watch"]:
+                    if key in snapshot:
+                        for row in snapshot[key]:
+                            prdt_name = row.get("name")
+                            if prdt_name:
+                                comment = self.watchlist_ai_comments.get_ai_comment(prdt_name)
+                                if comment:
+                                    row["ai_comment"] = comment
+
             return snapshot
         return None
 

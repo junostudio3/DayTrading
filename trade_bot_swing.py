@@ -41,10 +41,11 @@ class TradeBotSwing:
 
     def update_monitoring_list(self):
         new_list = []
-        stocks_list = self.parent.swing.watchlist.get_stocks()
-        for watchlist_item in stocks_list:
-            if not any(x.pdno == watchlist_item.pdno for x in new_list):
-                new_list.append(SymbolItem(watchlist_item.pdno, watchlist_item.prdt_name))
+        # get_stocks() 대신 원본 items 를 그대로 가져온다
+        for watchlist_item in self.parent.swing.watchlist.items:
+            # 중복 체크 (pdno 기준)
+            if not any(x.stock.pdno == watchlist_item.stock.pdno for x in new_list if hasattr(x, 'stock')):
+                new_list.append(watchlist_item)
 
         self.monitor_list = new_list
 
@@ -54,7 +55,8 @@ class TradeBotSwing:
         self.update_monitoring_list()
 
         # 현재 주기적인 체결 잔고 동기화는 단타봇이 진행하므로 생략
-        for symbol_item in self.monitor_list:
+        for watchlist_item in self.monitor_list:
+            symbol_item = watchlist_item.stock if hasattr(watchlist_item, 'stock') else watchlist_item
             self._process_step_judge(symbol_item, now)
 
     def _find_inventory(self, pdno: str):
@@ -132,11 +134,13 @@ class TradeBotSwing:
         pdno_to_name = {}
         watch_pdnos = []
         watch_pdno_set = set()
-        for item in self.monitor_list:
-            pdno = item.pdno
+        
+        for p in self.monitor_list:
+            pdno = p.stock.pdno if hasattr(p, 'stock') else getattr(p, 'pdno', None)
+            prdt_name = p.stock.prdt_name if hasattr(p, 'stock') else getattr(p, 'prdt_name', None)
             if not pdno:
                 continue
-            pdno_to_name[pdno] = item.prdt_name
+            pdno_to_name[pdno] = prdt_name
             if pdno not in watch_pdno_set:
                 watch_pdnos.append(pdno)
                 watch_pdno_set.add(pdno)

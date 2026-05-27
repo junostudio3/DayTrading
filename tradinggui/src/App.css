@@ -282,3 +282,60 @@ tbody tr.selected { background: #094771; }
 }
 .desktop-watch-tabs button { background: transparent; color:#aaa; border:none; cursor:pointer; padding:0 0 4px; font-size:1.1rem; }
 .desktop-watch-tabs button.active { color:#fff; border-bottom: 2px solid #007acc; }
+.ai-message { color: #81c784; font-weight: bold; white-space: pre-wrap; font-size: 0.95rem; }
+
+.ai-message-overlay {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  right: calc(33vw + 20px);
+  top: 40vh;
+  background: rgba(30, 30, 30, 0.98);
+  border: 1px solid #81c784;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.2s ease-out;
+}
+.ai-message-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.ai-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #2b4d2e;
+  border-radius: 8px 8px 0 0;
+  font-weight: bold;
+}
+.ai-message-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+.ai-message-text {
+  padding: 15px;
+  overflow-y: auto;
+  color: #a5d6a7;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+@media (max-width: 900px) {
+  .ai-message-overlay {
+    right: 10px;
+    top: 50vh;
+  }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
