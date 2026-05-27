@@ -18,6 +18,7 @@ interface Holding {
   purchase: number;
   current: number;
   profit_rate: number;
+  ai_comment?: string;
 }
 
 interface WatchItem {
@@ -318,7 +319,7 @@ function Dashboard() {
           </thead>
           <tbody>
             {snapshot?.holdings?.map((h) => (
-              <tr key={h.pdno} onClick={() => setSelectedPdno(h.pdno)} className={selectedPdno === h.pdno ? 'selected' : ''}>
+              <tr key={h.pdno} onClick={() => handleItemSelect(h.pdno, h.ai_comment)} className={selectedPdno === h.pdno ? 'selected' : ''}>
                 <td>{h.pdno}</td>
                 <td>{h.name}</td>
                 <td>{h.qty}</td>

@@ -345,7 +345,7 @@ class TradeBotManager:
                         snapshot["swing_watch"] = swing_snap["swing_watch"]
 
                 # AI 코멘트 정보 추가
-                for key in ["watch", "swing_watch"]:
+                for key in ["watch", "swing_watch", "holdings"]:
                     if key in snapshot:
                         for row in snapshot[key]:
                             prdt_name = row.get("name")
