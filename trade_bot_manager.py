@@ -333,29 +333,47 @@ class TradeBotManager:
 
     def get_dashboard_snapshot(self, app_id: str) -> Optional[dict]:
         bot = self.daily.bots.get(app_id)
-        if bot:
-            snapshot = bot.get_dashboard_snapshot()
-            if snapshot:
-                snapshot["update_elapsed"] = self.market_data_update_elapsed
-                snapshot["process_once_elapsed"] = self.process_once_elapsed
-                
-                swing_snap = self.swing.get_dashboard_snapshot(app_id)
-                if swing_snap:
-                    if "swing_watch" in swing_snap:
-                        snapshot["swing_watch"] = swing_snap["swing_watch"]
+        if bot is None:
+            return None
 
-                # AI 코멘트 정보 추가
-                for key in ["watch", "swing_watch", "holdings"]:
-                    if key in snapshot:
-                        for row in snapshot[key]:
-                            prdt_name = row.get("name")
-                            if prdt_name:
-                                comment = self.watchlist_ai_comments.get_ai_comment(prdt_name)
-                                if comment:
-                                    row["ai_comment"] = comment
+        snapshot = bot.get_dashboard_snapshot()
+        if snapshot is None:
+            return None
 
-            return snapshot
-        return None
+        snapshot["update_elapsed"] = self.market_data_update_elapsed
+        snapshot["process_once_elapsed"] = self.process_once_elapsed
+        
+        swing_snap = self.swing.get_dashboard_snapshot(app_id)
+        if swing_snap:
+            if "swing_watch" in swing_snap:
+                snapshot["swing_watch"] = swing_snap["swing_watch"]
+
+        # AI 코멘트 정보 추가
+        for key in ["watch", "swing_watch", "holdings"]:
+            if not key in snapshot:
+                continue
+
+            for row in snapshot[key]:
+                prdt_name = row.get("name")
+                if prdt_name is None:
+                    continue
+
+                purchase_price = None
+                quantity = None
+                for user in self.user_manager.users:
+                    if user.app_id == app_id:
+                        for stock in user.auth.portfolio.stocks:
+                            if stock['prdt_name'] == prdt_name:
+                                # 보유하고 있는 종목이면 매입가와 수량 정보를 가져온다
+                                purchase_price = stock['pchs_avg_pric']
+                                quantity = stock['hldg_qty']
+                                break
+
+                comment = self.watchlist_ai_comments.get_ai_comment(prdt_name, app_id, purchase_price, quantity)
+                if comment:
+                    row["ai_comment"] = comment
+
+        return snapshot
 
     def _update_watchlist(self, now: float):
         # 8시부터 4시 30분 사이에만 관심 종목을 탐색한다.

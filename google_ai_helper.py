@@ -81,13 +81,18 @@ class GoogleAiHelper:
         # ID에 해당하는 작업이 완료되었으면 결과 문자열 반환, 아니면 None (nullptr) 반환
         return self.results.get(request_id)
 
-    def request_swing_stack_check(self, stock_name: str) -> str:
-        prompt = (
-            f"{stock_name} 주식에 대한 최근 정보를 이용하여 투자에 대한 의견을 제시해줘.\n"
+    def request_swing_stack_check(self, prdt_name: str, purchase_price: int = None, quantity: int = None) -> str:
+        prompt = f"{prdt_name} 주식에 대한 최근 정보를 이용하여 투자에 대한 의견을 제시해줘.\n"
+        if purchase_price is not None and quantity is not None:
+            prompt += f"현재 매입가는 {purchase_price}원, 수량은 {quantity}주 보유하고 있어.\n"
+
+        prompt += (
+            f"{prdt_name} 주식에 대한 최근 정보를 이용하여 투자에 대한 의견을 제시해줘.\n"
             f"현재가 기준 중장기 투자 관점으로 적정가를 어떻게 생각하는지 방향을 제시해줘.\n"
             f"쓸대없는 말은 생략한다. (요약해 드립니다. 라든지)\n"
             f"가장먼저 현재가 기준 <구매추천> 등을 먼저 표기하고 텍스트로 총 3줄 정도로 요약해줘."
         )
+
         return self._request(prompt)
 
 if __name__ == "__main__":
