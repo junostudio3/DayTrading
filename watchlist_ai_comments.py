@@ -22,7 +22,7 @@ class WatchlistAIComments:
             comment_key = f"{prdt_name}_{app_id}"
 
         if comment_key in self.comments:
-            if time.time() - self.comments_updated_time.get(comment_key, 0) < 60 * 60 * 12: # 12시간 이내에 업데이트된 코멘트는 재사용한다
+            if time.time() - self.comments_updated_time.get(comment_key, 0) < 60 * 60 * 3: # 3시간 이내에 업데이트된 코멘트는 재사용한다
                 return self.comments[comment_key]
             # 오래된 코멘트는 삭제한다
             del self.comments[comment_key]

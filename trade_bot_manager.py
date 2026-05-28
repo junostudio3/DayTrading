@@ -11,8 +11,8 @@ from typing import List
 from common_structure import SymbolItem
 from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
 from filter import TradingParams
-from trade_bot_daily_comm import TradeBotDailyComm
-from trade_bot_swing_comm import TradeBotSwingComm
+from trade_bot_daily_group import TradeBotDailyGroup
+from trade_bot_swing_group import TradeBotSwingGroup
 from watchlist_ai_comments import WatchlistAIComments
 
 import io
@@ -56,8 +56,8 @@ class TradeBotManager:
             # 가격 조회 서비스 초기화
             self.market_data_service = MarketDataService(self.user_manager.users[0].auth)
 
-        self.daily = TradeBotDailyComm(self)
-        self.swing = TradeBotSwingComm(self)
+        self.daily = TradeBotDailyGroup(self)
+        self.swing = TradeBotSwingGroup(self)
 
         for user in self.user_manager.users:
             try:

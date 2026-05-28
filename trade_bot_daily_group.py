@@ -2,7 +2,7 @@ from api.kis_user import KisUser
 from trade_bot_daily import TradeBotDaily
 from watchlist import Watchlist
 
-class TradeBotDailyComm:
+class TradeBotDailyGroup:
     def __init__(self, parent):
         self.parent = parent
         self.watchlist = Watchlist("./cache/watchlist.json")

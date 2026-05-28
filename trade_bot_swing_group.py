@@ -8,7 +8,7 @@ from trade_bot_swing import TradeBotSwing
 import time
 
 
-class TradeBotSwingComm:
+class TradeBotSwingGroup:
     def __init__(self, parent):
         from trade_bot_manager import TradeBotManager
         self.parent: TradeBotManager = parent
