@@ -6,7 +6,8 @@ from api.kis_user import KisUser
 
 class TradeBotSwing:
     def __init__(self, parent, user: KisUser):
-        self.parent = parent
+        from trade_bot_manager import TradeBotManager
+        self.parent: TradeBotManager = parent
         self.log = parent.log
         self.trade_log = parent.trade_log
         self.user = user
@@ -40,12 +41,12 @@ class TradeBotSwing:
                 self.log(f"Swing 대상 - 종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
     def update_monitoring_list(self):
-        new_list = []
+        new_list: list[SymbolItem] = []
         # get_stocks() 대신 원본 items 를 그대로 가져온다
         for watchlist_item in self.parent.swing.watchlist.items:
             # 중복 체크 (pdno 기준)
-            if not any(x.stock.pdno == watchlist_item.stock.pdno for x in new_list if hasattr(x, 'stock')):
-                new_list.append(watchlist_item)
+            if not any(x.pdno == watchlist_item.stock.pdno for x in new_list):
+                new_list.append(watchlist_item.stock)
 
         self.monitor_list = new_list
 
@@ -55,8 +56,7 @@ class TradeBotSwing:
         self.update_monitoring_list()
 
         # 현재 주기적인 체결 잔고 동기화는 단타봇이 진행하므로 생략
-        for watchlist_item in self.monitor_list:
-            symbol_item = watchlist_item.stock if hasattr(watchlist_item, 'stock') else watchlist_item
+        for symbol_item in self.monitor_list:
             self._process_step_judge(symbol_item, now)
 
     def _find_inventory(self, pdno: str):
