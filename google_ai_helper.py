@@ -10,7 +10,7 @@ from KisKey import google_api_key
 class GoogleAiOptions:
     def __init__(self):
         self.model = "gemini-3.5-flash"  
-        self.request_per_minute = 2  # 분당 요청 수 제한
+        self.request_per_minute = 1  # 분당 요청 수 제한
         self.thinking_level = "MEDIUM"  # 사고 수준(LOW, MEDIUM, HIGH)
 
 class GoogleAiHelper:

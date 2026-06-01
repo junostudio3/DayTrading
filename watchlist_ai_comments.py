@@ -21,9 +21,21 @@ class WatchlistAIComments:
         else:
             comment_key = f"{prdt_name}_{app_id}"
 
+        current_time = time.time()
+
         if comment_key in self.comments:
-            if time.time() - self.comments_updated_time.get(comment_key, 0) < 60 * 60 * 3: # 3시간 이내에 업데이트된 코멘트는 재사용한다
+            # 이미 AI 코멘트가 존재하는 경우, 날짜가 바뀌지 않았으면 재사용
+            # 날짜가 바뀌었으면 9~10시 사이에 업데이트 (다른 시간에는 업데이트하지 않음)
+            updated_time = self.comments_updated_time.get(comment_key, 0)
+
+            # 날짜는 문자열로 비교
+            if time.strftime("%Y-%m-%d", time.localtime(updated_time)) == time.strftime("%Y-%m-%d", time.localtime(current_time)):
                 return self.comments[comment_key]
+
+            # 날짜가 바뀌었지만 9~10시 사이가 아니면 기존 코멘트를 유지한다
+            if not (9 <= time.localtime(current_time).tm_hour < 10):
+                return self.comments[comment_key]
+            
             # 오래된 코멘트는 삭제한다
             del self.comments[comment_key]
             del self.comments_updated_time[comment_key]
@@ -33,12 +45,17 @@ class WatchlistAIComments:
             # AI 코멘트 요청이 이미 된 종목은 결과가 나왔는지 확인한다
             ai_result = self.google_ai_helper.get_response(self.request_ids[comment_key])
             if ai_result is not None:
-                self.comments[comment_key] = ai_result
-                self.comments_updated_time[comment_key] = time.time()
+
+                comments = f"update time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}\n"
+                comments += ai_result
+
+                self.comments[comment_key] = comments
+                self.comments_updated_time[comment_key] = current_time
                 del self.request_ids[comment_key] # 결과를 받았으므로 ID 제거
                 self.save(self.file_path) # AI 코멘트가 업데이트된 종목은 저장한다
+                return comments
 
-            return ai_result
+            return None
 
         # AI 코멘트가 없는 경우 새로 요청한다
         request_id = self.google_ai_helper.request_swing_stack_check(prdt_name, purchase_price, quantity)
