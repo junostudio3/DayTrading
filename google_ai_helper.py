@@ -9,7 +9,7 @@ from KisKey import google_api_key
 
 class GoogleAiOptions:
     def __init__(self):
-        self.model = "gemini-3.5-flash"  
+        self.model = "gemini-2.5-flash"  
         self.request_per_minute = 1  # 분당 요청 수 제한
         self.thinking_level = "MEDIUM"  # 사고 수준(LOW, MEDIUM, HIGH)
 
@@ -54,14 +54,25 @@ class GoogleAiHelper:
         else:
             self.request_times.append(current_time)
 
-        config = types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(
-                thinking_level=self.options.thinking_level,
-            ),
-            tools=[
-                types.Tool(googleSearch=types.GoogleSearch()),
-            ],
-        )
+        if self.options.model == "gemini-3.5-flash":
+            config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=self.options.thinking_level,
+                ),
+                tools=[
+                    types.Tool(googleSearch=types.GoogleSearch()),
+                ],
+            )
+        else:
+            # Gemini 2.5 모델은 thinking_level 옵션이 없다
+            config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=-1,
+                ),
+                tools=[
+                    types.Tool(googleSearch=types.GoogleSearch()),
+                ],
+            )
 
         response = self.client.models.generate_content(
             model=self.options.model,

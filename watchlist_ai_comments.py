@@ -35,16 +35,14 @@ class WatchlistAIComments:
             # 날짜가 바뀌었지만 9~10시 사이가 아니면 기존 코멘트를 유지한다
             if not (9 <= time.localtime(current_time).tm_hour < 10):
                 return self.comments[comment_key]
-            
-            # 오래된 코멘트는 삭제한다
-            del self.comments[comment_key]
-            del self.comments_updated_time[comment_key]
-            self.save(self.file_path)
         
         if self.request_ids.get(comment_key, "") != "":
             # AI 코멘트 요청이 이미 된 종목은 결과가 나왔는지 확인한다
             ai_result = self.google_ai_helper.get_response(self.request_ids[comment_key])
             if ai_result is not None:
+                # 문자열에 Error:로 시작하는 경우는 AI 응답이 실패한 경우이므로 코멘트 업데이트를 하지 않고 기존 코멘트를 유지한다
+                if ai_result.startswith("Error:"):
+                    return self.comments.get(comment_key) # 기존 코멘트를 반환한다
 
                 comments = f"update time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))}\n"
                 comments += ai_result
@@ -69,6 +67,13 @@ class WatchlistAIComments:
                 data = json.load(f)
                 self.comments = data.get("comments", {})
                 self.comments_updated_time = data.get("comments_updated_time", {})
+
+                # comments가 update time: 으로 시작하지 않으면 기존 코멘트는 오래된 것이다. updated_time을 문자열에 붙여주자
+                for key in self.comments.keys():
+                    if self.comments[key].startswith("update time:") == False:
+                        comment_time = self.comments_updated_time.get(key, 0)
+                        self.comments[key] = f"update time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(comment_time))}\n{self.comments[key]}"
+
         except FileNotFoundError:
             # 파일이 없는 경우 빈 딕셔너리로 초기화한다
             self.comments = {}
