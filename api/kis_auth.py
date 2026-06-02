@@ -44,7 +44,11 @@ class KisAuth:
                     # 첫 번째 실패 시에만 로그를 남기고 토큰을 삭제한다.
                     if logger:
                         logger(f"계좌 정보 업데이트 실패: {e}")
-                    self.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 시도시 재발급 받도록 한다.
+                    
+                    # '허용 가능한 초당 거래건수를 초과하였습니다.' 라는 메시지가 있으면
+                    # 토큰에는 문제가 없는 것이므로 토큰을 삭제하지 않고 재시도한다.
+                    if len(e.args) == 0 or not "허용 가능한 초당 거래건수를 초과하였습니다." in str(e.args[0]):
+                        self.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 시도시 재발급 받도록 한다.
                 if retry_count >=0 and try_count >= retry_count:
                     if logger:
                         logger(f"계좌 정보 업데이트 실패: {e} (최대 재시도 횟수 초과)")
