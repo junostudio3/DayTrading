@@ -46,7 +46,7 @@ class TradingParams:
     WATCHLIST_ITEM_MAX_PRICE = 25000    # 관심종목 가격 상한
     WATCHLIST_ITEM_MIN_PRICE = 7000     # 관심종목 가격 하한
     WATCHLIST_ITEM_EXPIRY_DAYS = 3      # 관심종목 만료 기간(일) - 이 기간 이후 자동 교체 대상
-    WATCHLIST_ITEM_MAX_COUNT = 15       # 관심종목 최대 보유 수
+    WATCHLIST_ITEM_MAX_COUNT = 10       # 관심종목 최대 보유 수
     WATCHLIST_ITEM_MIN_VOLUME = 100000  # 관심종목 진입 최소 거래량 (빈자리 품질 게이트)
 
     # ── 종목 선정 필터 (Swing) ──

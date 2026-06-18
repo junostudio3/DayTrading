@@ -27,6 +27,13 @@ class TradeBotDailyGroup:
         for bot in self.bots.values():
             bot.display_account_info()
 
+    def get_dashboard_snapshot(self, app_id: str) -> dict:
+        bot = self.bots.get(app_id)
+        if bot:
+            return bot.get_dashboard_snapshot()
+        else:
+            return None
+
     def is_managing_pdno(self, app_id: str, pdno: str) -> bool:
         # 단타 봇이 관리하는 종목인지 확인
         bot = self.bots.get(app_id)

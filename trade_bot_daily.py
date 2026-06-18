@@ -34,7 +34,6 @@ class TradeBotDaily:
         self.auth = user.auth
         self.app_id = user.app_id
 
-        self.loop_count = 0
         self.pdno_states: dict[str, TradeState] = {}
         self.buy_fail_counts: dict[str, int] = {}
         self.monitor_list: list[SymbolItem] = []
@@ -386,10 +385,6 @@ class TradeBotDaily:
                 continue
             if pdno in processed_pdnos:
                 continue
-            if self.user.use_daily_bot is False:
-                # 사용자 설정에서 일간 봇 사용 안함으로 되어 있으면 일간 봇이 개입하지 않고 판단 단계에 머무르도록 한다.
-                # 봇 자체를 비활성화하는 것이 좋겠지만 현재 코드가 정리가 되어 있지 않아서 일단은 이렇게 처리한다.
-                continue
             processed_pdnos.add(pdno)
 
             state = self._get_trade_state(pdno)
@@ -412,8 +407,6 @@ class TradeBotDaily:
                 self._process_step_sell_check(symbol_item)
             else:
                 state.step = TradeStep.DECIDE_ON_PURCHASE
-
-        self.loop_count += 1
 
     def get_dashboard_snapshot(self):
         pdno_to_name = {}
@@ -448,40 +441,8 @@ class TradeBotDaily:
                 "step": self._get_trade_state(pdno).step.GetAbbreviation(),
             })
 
-        holdings_rows = []
-        for stock in self.auth.portfolio.stocks:
-            pdno = stock.get('pdno', '')
-            quantity = int(stock.get('hldg_qty', 0))
-            purchase_price = float(stock.get('pchs_avg_pric', 0))
-            current_price = None
-            if pdno in self.parent.price_analysis.items and self.parent.price_analysis.items[pdno].candle_stick_5minute:
-                current_price = self.parent.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
-
-            profit_rate = None
-            if current_price is not None and purchase_price > 0:
-                profit_rate = ((current_price - purchase_price) / purchase_price) * 100
-
-            holdings_rows.append({
-                "pdno": pdno,
-                "name": stock.get('prdt_name', pdno),
-                "qty": quantity,
-                "purchase": purchase_price,
-                "current": current_price,
-                "profit_rate": profit_rate,
-            })
-
         return {
-            "market_open": self.parent.is_market_open(),
-            "loop_count": self.loop_count,
-            "account": {
-                "tot_evlu_amt": self.auth.portfolio.balance.tot_evlu_amt,
-                "cash": self.auth.portfolio.balance.dnca_tot_amt,
-                "d1": self.auth.portfolio.balance.nxdy_excc_amt,
-                "d2": self.auth.portfolio.balance.prvs_rcdl_excc_amt,
-            },
-            "watch": watch_rows,
-            "holdings": holdings_rows,
-            "timestamp": time.time(),
+            "watch": watch_rows
         }
 
     def place_manual_buy(self, pdno: str, quantity: int):
@@ -604,3 +565,5 @@ class TradeBotDaily:
         self._symbol_log(symbol_item, f"즉시 매도 주문 실패\n{last_error}")
         self.auth.delete_token() # 토큰이 문제가 있을 수 있으니 삭제해서 다음 주문 시 재발급 받도록 한다.
         return None
+
+

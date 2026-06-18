@@ -27,6 +27,7 @@ class TradeBotManager:
         import threading
         self._price_lock = threading.Lock()
         # print로 로그를 남기도록 한다. (TradingEngine이 가동되면 log 함수는 엔진의 로그 함수로 대체된다.)
+        self.loop_count = 0
         self.log = print
         self.trade_log = None
         self.watchlist_ai_comments = WatchlistAIComments("./cache/watchlist_ai_comments.json")
@@ -61,7 +62,9 @@ class TradeBotManager:
 
         for user in self.user_manager.users:
             try:
-                self.daily.add_bot(user)
+                if user.use_daily_bot:
+                    self.daily.add_bot(user)
+
                 if user.use_swing_bot:
                     self.swing.add_bot(user)
             except Exception as e:
@@ -209,7 +212,7 @@ class TradeBotManager:
             self.is_running = False
             return
 
-        if self.is_running is False:
+        if self.is_running is not True:
             # 장이 닫혀 있다가 열린 경우 (장 시작)
             if not self.start_logged:
                 # 장 시작 시점에 모든 봇의 계좌 정보를 업데이트하고 기록한다.
@@ -230,6 +233,7 @@ class TradeBotManager:
         self.daily.process_once(app_id, now)
         self.swing.process_once(app_id, now)
         self.process_once_elapsed = time.time() - start_time
+        self.loop_count += 1
 
     def update_portfolio(self, record_history: bool, user: Optional[KisUser] = None):
         users_to_update = [user] if user is not None else self.user_manager.users
@@ -332,17 +336,51 @@ class TradeBotManager:
         self.swing.manual_sell(app_id, pdno, quantity, price)
 
     def get_dashboard_snapshot(self, app_id: str) -> Optional[dict]:
-        bot = self.daily.bots.get(app_id)
-        if bot is None:
-            return None
+        snapshot = {}
 
-        snapshot = bot.get_dashboard_snapshot()
-        if snapshot is None:
-            return None
+        # 보유 종목 정보 추가
+        user = self.user_manager.find_user(app_id)
+        if user is not None:
+            holdings_rows = []
+            for stock in user.auth.portfolio.stocks:
+                pdno = stock.get('pdno', '')
+                quantity = int(stock.get('hldg_qty', 0))
+                purchase_price = float(stock.get('pchs_avg_pric', 0))
+                current_price = None
+                if pdno in self.price_analysis.items and self.price_analysis.items[pdno].candle_stick_5minute:
+                    current_price = self.price_analysis.items[pdno].candle_stick_5minute[-1].close_price
 
+                profit_rate = None
+                if current_price is not None and purchase_price > 0:
+                    profit_rate = ((current_price - purchase_price) / purchase_price) * 100
+
+                holdings_rows.append({
+                    "pdno": pdno,
+                    "name": stock.get('prdt_name', pdno),
+                    "qty": quantity,
+                    "purchase": purchase_price,
+                    "current": current_price,
+                    "profit_rate": profit_rate,
+                })
+            snapshot["holdings"] = holdings_rows
+            snapshot["account"] = {
+                "tot_evlu_amt": user.auth.portfolio.balance.tot_evlu_amt,
+                "cash": user.auth.portfolio.balance.dnca_tot_amt,
+                "d1": user.auth.portfolio.balance.nxdy_excc_amt,
+                "d2": user.auth.portfolio.balance.prvs_rcdl_excc_amt,
+            }
+
+        snapshot["market_open"] = self.is_market_open()
         snapshot["update_elapsed"] = self.market_data_update_elapsed
         snapshot["process_once_elapsed"] = self.process_once_elapsed
+        snapshot["timestamp"] = time.time()
+        snapshot["loop_count"] = self.loop_count
         
+        daily_snap = self.daily.get_dashboard_snapshot(app_id)
+        if daily_snap:
+            if "watch" in daily_snap:
+                snapshot["watch"] = daily_snap["watch"]
+
         swing_snap = self.swing.get_dashboard_snapshot(app_id)
         if swing_snap:
             if "swing_watch" in swing_snap:
