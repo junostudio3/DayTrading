@@ -514,6 +514,14 @@ class TradeBotManager:
                 if item.pdno not in monitor_dict:
                     monitor_dict[item.pdno] = item
 
+        # 재고로 가지고 있는 건 모두 모니터링 리스트에 추가
+        for user in self.user_manager.users:
+            for stock in user.auth.portfolio.stocks:
+                pdno = stock.get('pdno', '')
+                prdt_name = stock.get('prdt_name', '')
+                if pdno not in monitor_dict:
+                    monitor_dict[pdno] = SymbolItem(pdno, prdt_name)
+
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [executor.submit(self._update_price, symbol_item, now) for symbol_item in monitor_dict.values()]
