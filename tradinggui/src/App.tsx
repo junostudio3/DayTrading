@@ -41,6 +41,10 @@ interface Snapshot {
   holdings: Holding[];
   watch: WatchItem[];
   swing_watch?: WatchItem[];
+  today_investment_advice?: {
+    date: string;
+    text: string;
+  };
   logs: string[];
   trade_logs: string[];
 }
@@ -191,7 +195,7 @@ function Dashboard() {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
-  const [marketTab, setMarketTab] = useState<'holdings' | 'watch' | 'swing_watch'>('holdings');
+  const [marketTab, setMarketTab] = useState<'today_advice' | 'holdings' | 'watch' | 'swing_watch'>('today_advice');
   const [tab, setTab] = useState<'trade_logs' | 'logs' | 'history' | 'profit_history'>('trade_logs');
   const [orderModal, setOrderModal] = useState<{ show: boolean; side: 'buy' | 'sell'; pdno: string | null }>({ show: false, side: 'buy', pdno: null });
   const [orderQty, setOrderQty] = useState<string>('');
@@ -339,6 +343,25 @@ function Dashboard() {
     </div>
   );
 
+  const renderTodayAdviceSection = (className = 'section') => {
+    const advice = snapshot?.today_investment_advice;
+    return (
+      <div className={className}>
+        <h2>오늘투자조언</h2>
+        <div className="today-advice-box">
+          {advice ? (
+            <>
+              <div className="today-advice-date">답변일: {advice.date}</div>
+              <div className="today-advice-text">{advice.text}</div>
+            </>
+          ) : (
+            <div className="today-advice-empty">오늘 10시 이후 AI 조언을 준비 중입니다.</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
 
   const renderSwingWatchSection = (className = 'section') => (
     <div className={className}>
@@ -440,10 +463,12 @@ function Dashboard() {
       <div className="main-content">
         <div className="left-panel">
           <div className="market-tabs" role="tablist" aria-label="보유주식과 관심종목">
+            <button className={marketTab === 'today_advice' ? 'active' : ''} onClick={() => setMarketTab('today_advice')}>오늘투자조언</button>
             <button className={marketTab === 'holdings' ? 'active' : ''} onClick={() => setMarketTab('holdings')}>보유주식</button>
             <button className={marketTab === 'watch' ? 'active' : ''} onClick={() => setMarketTab('watch')}>관심종목</button>
             <button className={marketTab === 'swing_watch' ? 'active' : ''} onClick={() => setMarketTab('swing_watch')}>관심스윙종목</button>
           </div>
+          {renderTodayAdviceSection(`section mobile-tab-section ${marketTab === 'today_advice' ? 'active' : ''}`)}
           {renderHoldingsSection(`section mobile-tab-section ${marketTab === 'holdings' ? 'active' : ''}`)}
           {renderWatchSection(`section mobile-tab-section ${marketTab === 'watch' ? 'active' : ''}`)}
           {renderSwingWatchSection(`section mobile-tab-section ${marketTab === 'swing_watch' ? 'active' : ''}`)}
@@ -458,10 +483,11 @@ function Dashboard() {
 
         <div className="right-panel desktop-watch-panel">
           <div className="market-tabs desktop-watch-tabs">
-            <button className={marketTab !== 'swing_watch' ? 'active' : ''} onClick={() => setMarketTab('watch')}>매일관심 (Day)</button>
+            <button className={marketTab === 'today_advice' ? 'active' : ''} onClick={() => setMarketTab('today_advice')}>오늘투자조언</button>
+            <button className={marketTab === 'watch' ? 'active' : ''} onClick={() => setMarketTab('watch')}>매일관심 (Day)</button>
             <button className={marketTab === 'swing_watch' ? 'active' : ''} onClick={() => setMarketTab('swing_watch')}>스윙관심 (Swing)</button>
           </div>
-          {marketTab === 'swing_watch' ? renderSwingWatchSection() : renderWatchSection()}
+          {marketTab === 'today_advice' ? renderTodayAdviceSection() : (marketTab === 'swing_watch' ? renderSwingWatchSection() : renderWatchSection())}
         </div>
       </div>
 

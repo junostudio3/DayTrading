@@ -92,6 +92,12 @@ class GoogleAiHelper:
         # ID에 해당하는 작업이 완료되었으면 결과 문자열 반환, 아니면 None (nullptr) 반환
         return self.results.get(request_id)
 
+    def _to_int_safe(self, value, default: int = 0) -> int:
+        try:
+            return int(float(str(value)))
+        except (TypeError, ValueError):
+            return default
+
     def request_swing_stack_check(self, prdt_name: str, purchase_price: int = None, quantity: int = None) -> str:
         prompt = f"{prdt_name} 주식에 대한 최근 정보를 이용하여 투자에 대한 의견을 제시해줘.\n"
         if purchase_price is not None and quantity is not None:
@@ -103,6 +109,25 @@ class GoogleAiHelper:
             f"쓸대없는 말은 생략한다. (요약해 드립니다. 라든지)\n"
             f"가장먼저 현재가 기준 <구매추천> 등을 먼저 표기하고 텍스트로 총 3줄 정도로 요약해줘."
         )
+
+        return self._request(prompt)
+    
+    def request_swing_stack_check_with_price(self, kis_auth_portfolio):
+        from api.kis_auth_portfolio import KisAuthPortfolio
+        if not isinstance(kis_auth_portfolio, KisAuthPortfolio):
+            raise ValueError("kis_auth_portfolio must be an instance of KisAuthPortfolio")
+        
+        portfolio: KisAuthPortfolio = kis_auth_portfolio
+        prompt = "현재 다음의 주식보유. (매입가x수량)\n"
+        for stock in portfolio.stocks:
+            prdt_name = stock['prdt_name']
+            hldg_qty = self._to_int_safe(stock.get('hldg_qty', 0)) # 보유수량
+            pchs_avg_pric = self._to_int_safe(stock.get('pchs_avg_pric', 0)) # 평균매입가
+            prompt += f"{prdt_name} : {pchs_avg_pric}원x{hldg_qty}주\n"
+        prompt += f"예수금은 {self._to_int_safe(portfolio.balance.dnca_tot_amt)}원\n"
+        prompt += "주식에 대한 최근 정보를 이용하여 투자에 대한 의견을 제시.\n"
+        prompt += "예수금 외에 20만원까지 다른 곳에 투자가 필요하다면 제시.\n"
+        prompt += "단답형식으로. 수식어구 자제. 문장사이에는 줄갱신. ETF 매수 자제."
 
         return self._request(prompt)
 

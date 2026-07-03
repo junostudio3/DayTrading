@@ -14,6 +14,7 @@ from filter import TradingParams
 from trade_bot_daily_group import TradeBotDailyGroup
 from trade_bot_swing_group import TradeBotSwingGroup
 from watchlist_ai_comments import WatchlistAIComments
+from daily_investment_advice import DailyInvestmentAdvice
 
 import io
 import os
@@ -31,6 +32,7 @@ class TradeBotManager:
         self.log = print
         self.trade_log = None
         self.watchlist_ai_comments = WatchlistAIComments("./cache/watchlist_ai_comments.json")
+        self.daily_investment_advice = DailyInvestmentAdvice("./cache/daily_investment_advice.json")
         self.symbol_snapshot_cache = SymbolSnapshotCache("./cache/symbol_snapshot_cache.db")
         self.price_analysis = PriceAnalysis("./cache/price_analysis/")
         self.price_update_interval_sec = 2.5
@@ -369,6 +371,10 @@ class TradeBotManager:
                 "d1": user.auth.portfolio.balance.nxdy_excc_amt,
                 "d2": user.auth.portfolio.balance.prvs_rcdl_excc_amt,
             }
+
+            today_advice = self.daily_investment_advice.get_advice(user.app_id, user.auth.portfolio)
+            if today_advice is not None:
+                snapshot["today_investment_advice"] = today_advice
 
         snapshot["market_open"] = self.is_market_open()
         snapshot["update_elapsed"] = self.market_data_update_elapsed

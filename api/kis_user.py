@@ -71,6 +71,20 @@ class KisUserManager:
                     if not is_valid:
                         logger(f"사용자 {user.app_id}는 모의투자 계좌가 계좌 정보 업데이트에 실패했습니다. 무시됩니다. 추후 확인하세요")
                         continue
+                    else:
+                        while True:
+                            if user.auth.update_stocks(logger=logger, retry_count=5):
+                                break
+                            if is_virtual:
+                                # 모의투자 때문에 시작을 못하는 것은 좋지 않으므로
+                                # 모의투자 계좌는 계좌 정보 업데이트에 실패하더라도 계속 진행한다.
+                                is_valid = False
+                                break
+                            time.sleep(1)
+                        if not is_valid:
+                            logger(f"사용자 {user.app_id}는 모의투자 계좌가 주식 정보 업데이트에 실패했습니다. 무시됩니다. 추후 확인하세요")
+                            continue
+
                     self.add_user(user)
         except Exception as e:
             logger(f"사용자 정보 파일을 읽어오는 중 오류가 발생했습니다: {e}")

@@ -284,6 +284,32 @@ tbody tr.selected { background: #094771; }
 .desktop-watch-tabs button.active { color:#fff; border-bottom: 2px solid #007acc; }
 .ai-message { color: #81c784; font-weight: bold; white-space: pre-wrap; font-size: 0.95rem; }
 
+.today-advice-box {
+  flex: 1;
+  border: 1px solid #3c3c3c;
+  background: #1e1e1e;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.today-advice-date {
+  color: #9ecbff;
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+
+.today-advice-text {
+  color: #d9d9d9;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  font-size: 0.95rem;
+}
+
+.today-advice-empty {
+  color: #9a9a9a;
+  font-size: 0.95rem;
+}
+
 .ai-message-overlay {
   position: absolute;
   bottom: 10px;
