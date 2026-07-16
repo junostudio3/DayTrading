@@ -1,5 +1,5 @@
-from common_structure import AccountBalance
-from common_structure import SymbolItem
+from kis_api.structure import AccountBalance
+from kis_api.structure import SymbolItem
 import time
 import os
 from enum import Enum, auto

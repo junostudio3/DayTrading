@@ -8,7 +8,7 @@ from kis_api.info_kospi import load_kospi_master
 from price_analysis import PriceAnalysis
 from typing import Optional
 from typing import List
-from common_structure import SymbolItem
+from kis_api.structure import SymbolItem
 from symbol_snapshot_cache import SymbolSnapshot, SymbolSnapshotCache
 from filter import TradingParams
 from trade_bot_daily_group import TradeBotDailyGroup

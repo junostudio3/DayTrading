@@ -1,9 +1,9 @@
 import os
 import time
 import sqlite3
-from candlestick import Candlestick
-from candlestick import CandlestickMerger
-from common_structure import SymbolItem
+from kis_api.candlestick import Candlestick
+from kis_api.candlestick import CandlestickMerger
+from kis_api.structure import SymbolItem
 from filter import TradingParams
 
 class PriceAnalysisItem:

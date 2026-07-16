@@ -3,7 +3,7 @@ import os
 import time
 from filter import SymbolFilter, TradingParams
 from typing import List
-from common_structure import SymbolItem
+from kis_api.structure import SymbolItem
 from dataclasses import dataclass
 
 @dataclass

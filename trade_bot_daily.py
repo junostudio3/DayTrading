@@ -1,6 +1,6 @@
 from kis_api.kis_auth_order import OrderCheckResult
 from kis_api.kis_user import KisUser
-from common_structure import SymbolItem
+from kis_api.structure import SymbolItem
 from dataclasses import dataclass
 from filter import TradingParams
 from trade_reporter import TradeReporter

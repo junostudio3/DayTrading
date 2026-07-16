@@ -1,8 +1,8 @@
 import os
 import time
 from price_analysis_item import PriceAnalysisItem
-from candlestick import Candlestick
-from common_structure import SymbolItem
+from kis_api.candlestick import Candlestick
+from kis_api.structure import SymbolItem
 
 class PriceAnalysis:
     def __init__(self, cache_dir):

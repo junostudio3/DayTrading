@@ -3,7 +3,7 @@ import glob
 import sqlite3
 from price_analysis_item import PriceAnalysisItem
 from filter import TradingParams
-from candlestick import Candlestick
+from kis_api.candlestick import Candlestick
 from datetime import datetime
 
 class DummySymbolItem:

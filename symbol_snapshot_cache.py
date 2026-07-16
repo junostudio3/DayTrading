@@ -1,6 +1,6 @@
 import sqlite3
 import time
-from common_structure import SymbolItem
+from kis_api.structure import SymbolItem
 
 
 # SymbolSnapshot

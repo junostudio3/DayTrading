@@ -1,5 +1,5 @@
 from kis_api.kis_user import KisUser
-from common_structure import SymbolItem
+from kis_api.structure import SymbolItem
 from filter import SymbolFilter
 from price_day_chat import PriceDayChat
 from trade_bot_swing_watchlist import SwingWatchlist

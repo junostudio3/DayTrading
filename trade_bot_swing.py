@@ -1,5 +1,5 @@
 from typing import Optional
-from common_structure import SymbolItem
+from kis_api.structure import SymbolItem
 from telegram import Telegram
 from kis_api.kis_user import KisUser
 

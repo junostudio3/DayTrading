@@ -4,7 +4,7 @@ import time
 import tempfile
 from unittest.mock import patch
 from watchlist import Watchlist
-from common_structure import SymbolItem
+from kis_api.structure import SymbolItem
 
 class TestWatchlist(unittest.TestCase):
     def setUp(self):
