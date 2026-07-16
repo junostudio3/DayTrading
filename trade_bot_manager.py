@@ -64,10 +64,9 @@ class TradeBotManager:
 
         for user in self.user_manager.users:
             try:
-                if user.use_daily_bot:
+                if user.bot_type == "daily":
                     self.daily.add_bot(user)
-
-                if user.use_swing_bot:
+                elif user.bot_type == "swing":
                     self.swing.add_bot(user)
             except Exception as e:
                 self.log(f"사용자 {user.app_id}에 대한 봇 초기화 중 오류가 발생했습니다: {e}")
