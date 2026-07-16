@@ -1,7 +1,7 @@
 from typing import Optional
 from common_structure import SymbolItem
 from telegram import Telegram
-from api.kis_user import KisUser
+from kis_api.kis_user import KisUser
 
 
 class TradeBotSwing:

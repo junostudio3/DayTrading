@@ -1,5 +1,5 @@
-from api.kis_auth_order import OrderCheckResult
-from api.kis_user import KisUser
+from kis_api.kis_auth_order import OrderCheckResult
+from kis_api.kis_user import KisUser
 from common_structure import SymbolItem
 from dataclasses import dataclass
 from filter import TradingParams

@@ -1,4 +1,4 @@
-from api.kis_user import KisUser
+from kis_api.kis_user import KisUser
 from trade_bot_daily import TradeBotDaily
 from watchlist import Watchlist
 

@@ -113,7 +113,7 @@ class GoogleAiHelper:
         return self._request(prompt)
     
     def request_swing_stack_check_with_price(self, kis_auth_portfolio):
-        from api.kis_auth_portfolio import KisAuthPortfolio
+        from kis_api.kis_auth_portfolio import KisAuthPortfolio
         if not isinstance(kis_auth_portfolio, KisAuthPortfolio):
             raise ValueError("kis_auth_portfolio must be an instance of KisAuthPortfolio")
         

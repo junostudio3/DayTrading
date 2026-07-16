@@ -1,4 +1,4 @@
-from api.kis_user import KisUser
+from kis_api.kis_user import KisUser
 from common_structure import SymbolItem
 from filter import SymbolFilter
 from price_day_chat import PriceDayChat
