@@ -35,9 +35,6 @@ class TradeBotSwing:
             self.log("보유 주식이 없습니다.")
         else:
             for stock in self.auth.portfolio.stocks:
-                # 단타 봇이 관리하지 않는 종목만
-                if self.parent.daily.is_managing_pdno(self.app_id, stock['pdno']):
-                    continue
                 self.log(f"Swing 대상 - 종목번호: {stock['pdno']} {stock['prdt_name']}, 보유수량: {stock['hldg_qty']}, 매입평균가: {stock['pchs_avg_pric']}")
 
     def update_monitoring_list(self):

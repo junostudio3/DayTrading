@@ -34,13 +34,6 @@ class TradeBotDailyGroup:
         else:
             return None
 
-    def is_managing_pdno(self, app_id: str, pdno: str) -> bool:
-        # 단타 봇이 관리하는 종목인지 확인
-        bot = self.bots.get(app_id)
-        if bot and pdno in bot.bot_purchased_pdnos:
-            return True
-        return False
-
     def process_once(self, app_id: str, now: float):
         bot = self.bots.get(app_id)
         if bot:
