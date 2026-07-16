@@ -1,0 +1,3 @@
+[submodule "kis_api"]
+	path = kis_api
+	url = git@github.com:junostudio3/kis_api.git
